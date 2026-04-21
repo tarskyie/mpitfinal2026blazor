@@ -1,0 +1,243 @@
+﻿@page "/"
+@inject Services.ZhgutLlmService zhgutLlmService
+@inject IJSRuntime JS
+
+<style>
+    .chat-messages-scroll {
+        height: calc(100vh - 280px);
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 8px 4px;
+    }
+</style>
+
+<MudGrid Spacing="0" Style="height: calc(100vh - 180px);">
+
+    <!-- Chat column -->
+    <MudItem xs="12" md="12" lg="12" Style="display: flex; flex-direction: column;">
+        <MudPaper Elevation="0" Style="display: flex; flex-direction: column; height: 100%;">
+
+            <!-- Messages -->
+            <div class="chat-messages-scroll" id="chat-scroll">
+
+                @if (!chatMessages.Any())
+                {
+                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.45; padding-top: 60px;">
+                        <MudIcon Icon="@Icons.Material.Outlined.Forum" Style="font-size: 3.5rem;" />
+                        <MudText Typo="Typo.h6" Class="mt-2">Нет сообщений</MudText>
+                        <MudText Typo="Typo.body2">Настройте параметры справа и начните диалог</MudText>
+                    </div>
+                }
+
+                @foreach (var item in chatMessages)
+                {
+                    bool isUser = item.Role == "User";
+                    <div style="display: flex; justify-content: @(isUser ? "flex-end" : "flex-start"); align-items: flex-end; gap: 8px;">
+                        <div>
+                            <div class="@(isUser ? "bubble-user" : "bubble-assistant")">
+                                @item.Role: <MudText Typo="Typo.body1">@item.Content</MudText>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (isLoading)
+                {
+                    <div style="display: flex; align-items: flex-end; gap: 8px;">
+                        <MudAvatar Color="Color.Primary" Size="Size.Small">AI</MudAvatar>
+                        <div class="bubble-assistant">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true" ShowCloseIcon="true"
+                              CloseIconClicked="() => errorMessage = string.Empty">
+                        @errorMessage
+                    </MudAlert>
+                }
+            </div>
+
+            <!-- Input bar -->
+            <MudPaper Elevation="2" Style="padding: 10px 12px; margin-top: auto;">
+                <MudStack Row="true" AlignItems="AlignItems.End" Spacing="2">
+                    <MudTextField T="string"
+                                  Placeholder="Введите сообщение…"
+                                  @bind-Value="prompt"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  AutoGrow="true"
+                                  FullWidth="true"
+                                  Disabled="isLoading"
+                                  OnKeyDown="HandleKeyDown"
+                                  Immediate="true" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Send"
+                                   Color="Color.Primary"
+                                   Variant="Variant.Filled"
+                                   Size="Size.Medium"
+                                   Disabled="@(isLoading || string.IsNullOrWhiteSpace(prompt))"
+                                   Style="align-self: center;"
+                                   OnClick="SendMessage" />
+                </MudStack>
+            </MudPaper>
+        </MudPaper>
+        <MudPaper Elevation="1" Style="padding: 16px; overflow-y: auto;">
+
+            <MudText Typo="Typo.subtitle1" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="mr-1" />
+                Настройки
+            </MudText>
+
+            <MudTextField T="string"
+                          Label="Base URL"
+                          Placeholder="https://api.example.com"
+                          @bind-Value="url"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          FullWidth="true"
+                          Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="API Key"
+                          Placeholder="sk-..."
+                          @bind-Value="key"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          FullWidth="true"
+                          Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="Модель"
+                          Placeholder="gpt-4o"
+                          @bind-Value="model"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          FullWidth="true"
+                          Class="mb-3" />
+
+            <MudText Typo="Typo.body2" Class="mb-1">
+                Температура: <strong>@temperature.ToString("0.0")</strong>
+            </MudText>
+            <MudSlider T="double"
+                       @bind-Value="temperature"
+                       Min="0.0" Max="2.0" Step="0.1"
+                       Color="Color.Primary"
+                       Class="mb-3" />
+
+            <MudDivider Class="mb-3" />
+
+            <MudTextField T="string"
+                          Label="Системный промпт"
+                          Placeholder="Ты полезный ассистент…"
+                          @bind-Value="systemPrompt"
+                          Variant="Variant.Outlined"
+                          Lines="4"
+                          Margin="Margin.Dense"
+                          FullWidth="true"
+                          Class="mb-4" />
+
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.DeleteSweep"
+                       FullWidth="true"
+                       OnClick="ClearHistory">
+                Очистить историю
+            </MudButton>
+
+            @if (chatMessages.Any())
+            {
+                <MudText Typo="Typo.caption" Style="display:block; text-align:center; margin-top:8px; opacity:0.5;">
+                    @chatMessages.Count сообщ. в истории
+                </MudText>
+            }
+
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    List<Services.ChatMessage> chatMessages = new();
+    bool isLoading = false;
+    string prompt = string.Empty;
+    string model = string.Empty;
+    string key = string.Empty;
+    string url = string.Empty;
+    string systemPrompt = string.Empty;
+    string errorMessage = string.Empty;
+    double temperature = 0.7;
+
+    bool sendButton_IsEnabled => !isLoading && !string.IsNullOrWhiteSpace(prompt);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JS.InvokeVoidAsync("eval",
+            "var el = document.getElementById('chat-scroll'); if(el) el.scrollTop = el.scrollHeight;");
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await SendMessage();
+    }
+
+    private void ClearHistory()
+    {
+        chatMessages.Clear();
+        errorMessage = string.Empty;
+    }
+
+    private async Task SendMessage()
+    {
+        if (!sendButton_IsEnabled)
+            return;
+
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        chatMessages.Add(new Services.ChatMessage { Role = "User", Content = prompt.Trim() });
+        prompt = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var messages = new List<Services.ChatMessage>();
+            if (!string.IsNullOrWhiteSpace(systemPrompt))
+                messages.Add(new Services.ChatMessage { Role = "System", Content = systemPrompt });
+            messages.AddRange(chatMessages);
+
+            var request = new Services.ChatCompletionRequest
+            {
+                Model = model,
+                Messages = messages,
+                Temperature = temperature
+            };
+
+            var response = await zhgutLlmService.GetChatCompletionAsync(
+                request: request, apiKey: key, baseUrl: url);
+
+            if (response == null)
+            {
+                errorMessage = "Ответ от API не получен.";
+            }
+            else
+            {
+                var content = response.Choices[response.Choices.Count - 1].Message.Content;
+                chatMessages.Add(new Services.ChatMessage { Role = "Assistant", Content = content });
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

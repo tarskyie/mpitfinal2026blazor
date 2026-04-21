@@ -1,0 +1,105 @@
+﻿@inherits LayoutComponentBase
+@using MudBlazor
+@inject NavigationManager navigationManager
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudLayout Style="display: flex; flex-direction: column; min-height: 100vh;">
+    <MudAppBar Elevation="0">
+        <MudButton Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                <MudText Class="fw-semibold">Трекер CORe</MudText>
+            </MudStack>
+        </MudButton>
+        <MudSpacer />
+        @if (!isLoggedIn){
+            <MudButton Href="/login">вход</MudButton>
+            <MudButton Href="/register">регистрация</MudButton>
+        }
+        else
+        {
+            <MudStack Row="true" Class="d-flex align-items-center">
+                <MudText>@name</MudText>
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="20" cy="20" r="20" fill="#D9D9D9" />
+                </svg>
+                <MudMenu Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit">
+                    <MudMenuItem OnClick="LogOut">Выйти</MudMenuItem>
+                </MudMenu>
+            </MudStack>
+        }
+    </MudAppBar>
+
+    <MudDrawer id="nav-drawer" @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent Class="pt-16 pa-4 flex-grow-1">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private MudTheme _theme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#3e64ff",
+            Secondary = "#00c853",
+            AppbarBackground = "#ffffff",
+        },
+        Typography = new Typography()
+        {
+            Default = new DefaultTypography()
+            {
+                FontFamily = new[] { "Inter", "sans-serif" }
+            }
+        }
+    };
+    private bool _drawerOpen = false;
+    private bool isLoggedIn = false;
+    private string name = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private void OnThemeChangedHandler()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LogOut()
+    {
+        // there's no function yet
+
+        navigationManager.NavigateTo("/", forceLoad: true);
+    }
+
+    // Controls
+    private void Profile_Click()
+    {
+        navigationManager.NavigateTo("/login");
+    }
+}
+
