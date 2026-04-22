@@ -26,7 +26,7 @@
                     <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.45; padding-top: 60px;">
                         <MudIcon Icon="@Icons.Material.Outlined.Forum" Style="font-size: 3.5rem;" />
                         <MudText Typo="Typo.h6" Class="mt-2">Нет сообщений</MudText>
-                        <MudText Typo="Typo.body2">Настройте параметры справа и начните диалог</MudText>
+                        <MudText Typo="Typo.body2">Настройте параметры снизу и начните диалог</MudText>
                     </div>
                 }
 
@@ -148,9 +148,20 @@
         </MudPaper>
     </MudItem>
     <MudItem xs="12" md="4" lg="3" Style="display: flex; flex-direction: column; background-color: var(--mud-palette-background-grey);">
-        <div class="pa-4">
-            <MudText Typo="Typo.h6">Список задач</MudText>
-        </div>
+        <MudPaper Class="pa-4 h-100">
+            <MudText Typo="Typo.h4">Список задач</MudText>
+
+            <MudTextField @bind-Value="_newTask" Label="Новая задача" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddTask" />
+    
+            <MudList T="TodoItem" Clickable="true">
+                @foreach (var task in _todoList)
+                {
+                    <MudListItem>
+                        <MudCheckBox @bind-Value="task.IsDone" Label="@task.Title" />
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
     </MudItem>
 </MudGrid>
 
@@ -161,9 +172,12 @@
     string model = string.Empty;
     string key = string.Empty;
     string url = string.Empty;
-    string systemPrompt = string.Empty;
+    string systemPrompt = "You're an AI assistant attached to a to-do tasks app.";
     string errorMessage = string.Empty;
     double temperature = 0.7;
+
+    private string? _newTask;
+    private List<TodoItem> _todoList = new();
 
     bool sendButton_IsEnabled => !isLoading && !string.IsNullOrWhiteSpace(prompt);
 
@@ -203,6 +217,8 @@
             if (!string.IsNullOrWhiteSpace(systemPrompt))
                 messages.Add(new Services.ChatMessage { Role = "System", Content = systemPrompt });
             messages.AddRange(chatMessages);
+            messages.Add(new Services.ChatMessage { Role = "System", Content = $"Current unticked tasks: {GetContext()}. Current ticked tasks: {GetContext(getTicked: true)}" });
+            //prompt = messages[messages.Count - 1].ToString();
 
             var request = new Services.ChatCompletionRequest
             {
@@ -234,4 +250,33 @@
             StateHasChanged();
         }
     }
+
+    private void AddTask()
+    {
+        if (!string.IsNullOrWhiteSpace(_newTask))
+        {
+            _todoList.Add(new TodoItem { Title = _newTask });
+            _newTask = string.Empty;
+            //prompt = $"Current unticked tasks: {GetContext()}. Current ticked tasks: {GetContext(getTicked: true)}";
+            StateHasChanged(); 
+        }
+    }
+
+    private string GetContext(bool getTicked = false)
+    {
+        string res = string.Empty;
+        foreach (var task in _todoList)
+        {
+            if (task.IsDone != getTicked) { continue; }
+            res += task.Title + ";";
+        }
+        return res;
+    }
+
+    public class TodoItem
+    {
+        public string Title { get; set; } = String.Empty;
+        public bool IsDone { get; set; }
+    }
+
 }

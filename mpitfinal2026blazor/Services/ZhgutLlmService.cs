@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -15,7 +16,7 @@ namespace mpitfinal2026blazor.Services
 
         public async Task<ChatCompletionResponse?> GetChatCompletionAsync(ChatCompletionRequest request, string apiKey, string baseUrl)
         {
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, new Uri(baseUrl+"/v1/chat/completions"));
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, new Uri(RemoveTrailingSlash(baseUrl)+"/v1/chat/completions"));
             requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             
             var jsonRequest = JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
@@ -32,9 +33,9 @@ namespace mpitfinal2026blazor.Services
             return null;
         }
 
-        public async Task<TextCompletionResponse?> GetTextCompletionAsync(TextCompletionRequest request, string apiKey, string? baseUrl = null)
+        public async Task<TextCompletionResponse?> GetTextCompletionAsync(TextCompletionRequest request, string apiKey, string baseUrl)
         {
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, baseUrl ?? "completions");
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, new Uri(RemoveTrailingSlash(baseUrl) + "/v1/completions"));
             requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
             var jsonRequest = JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
@@ -49,6 +50,15 @@ namespace mpitfinal2026blazor.Services
             }
 
             return null;
+        }
+
+        private string RemoveTrailingSlash(string path)
+        {
+            if (path[path.Length - 1] == '/')
+            {
+                path = path.Remove(path.Length - 1);
+            }
+            return path;
         }
     }
 
