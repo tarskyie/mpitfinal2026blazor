@@ -1,5 +1,55 @@
-﻿<h3>Profile</h3>
+﻿@page "/profile"
+@inject ProfileService profileService
+@inject StorageService storageService
+@inject ISnackbar Snackbar
+
+<div class="d-flex justify-content-center">
+    <MudPaper Elevation="4" Class="pa-8 mt-2 m-2" Style="border-radius: 16px; width: 400px;">
+        <MudStack Spacing="4">
+            <div class="text-center">
+                <MudText Typo="Typo.h4" GutterBottom="true">Профиль</MudText>
+                <MudText Typo="Typo.body2">Информация о вашем аккаунте</MudText>
+            </div>
+
+            @if (_isLoading)
+            {
+                <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+            }
+            else if (user != null)
+            {
+                <MudTextField Value="@user.Username" Label="Имя пользователя" Variant="Variant.Outlined" ReadOnly FullWidth />
+                <MudTextField Value="@user.Email" Label="Email" Variant="Variant.Outlined" ReadOnly FullWidth />
+                <MudTextField Value="@user.FirstName" Label="Имя" Variant="Variant.Outlined" ReadOnly FullWidth />
+                <MudTextField Value="@user.LastName" Label="Фамилия" Variant="Variant.Outlined" ReadOnly FullWidth />
+                <MudTextField Value="@user.UserType" Label="Тип пользователя" Variant="Variant.Outlined" ReadOnly FullWidth />
+            }
+            else
+            {
+                <MudText Color="Color.Error">Не удалось загрузить профиль пользователя.</MudText>
+            }
+        </MudStack>
+    </MudPaper>
+</div>
 
 @code {
+    private User? user;
+    private bool _isLoading = true;
 
+    protected override async Task OnInitializedAsync()
+    {
+        string? refreshToken = await storageService.GetItemAsync<string>("refresh_token");
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            string accessToken = await profileService.GetAccessToken(refreshToken);
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                var userJson = await profileService.GetYourself(accessToken);
+                if (userJson != null)
+                {
+                    user = System.Text.Json.JsonSerializer.Deserialize<User>(userJson.ToString()!, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+            }
+        }
+        _isLoading = false;
+    }
 }
