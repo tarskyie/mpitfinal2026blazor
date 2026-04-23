@@ -16,7 +16,7 @@ namespace mpitfinal2026blazor.Services
 
         public async Task<ChatCompletionResponse?> GetChatCompletionAsync(ChatCompletionRequest request, string apiKey, string baseUrl)
         {
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, new Uri(RemoveTrailingSlash(baseUrl)+"/v1/chat/completions"));
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, new Uri(RemoveTrailingSlash(baseUrl) + "/v1/chat/completions"));
             requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             
             var jsonRequest = JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
@@ -31,6 +31,20 @@ namespace mpitfinal2026blazor.Services
             }
 
             return null;
+        }
+
+        public async Task<string> GetChatCompletionDebugAsync(ChatCompletionRequest request, string apiKey, string baseUrl)
+        {
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, new Uri(RemoveTrailingSlash(baseUrl) + "/v1/chat/completions"));
+            requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+            var jsonRequest = JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+            requestMessage.Content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.SendAsync(requestMessage);
+
+            var jsonResponse = await response.Content.ReadAsStringAsync();
+            return jsonResponse;
         }
 
         public async Task<TextCompletionResponse?> GetTextCompletionAsync(TextCompletionRequest request, string apiKey, string baseUrl)

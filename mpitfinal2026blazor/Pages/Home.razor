@@ -1,7 +1,10 @@
 @page "/"
 @inject Services.ZhgutLlmService zhgutLlmService
+@inject Services.ProfileService profileService
+@inject Services.StorageService storageService
 @inject IJSRuntime JS
 @using System.Text
+@using System.Text.Json
 
 <style>
     .chat-messages-scroll {
@@ -58,9 +61,18 @@
         border-radius: 50%;
         margin: 1px;
     }
-    
+
     .marked {
         background-color: green;
+    }
+
+    /* Gray dot style for group tasks */
+    .group-task-dot {
+        width: 6px;
+        height: 6px;
+        background-color: #9e9e9e;
+        border-radius: 50%;
+        margin: 1px;
     }
 </style>
 
@@ -83,7 +95,7 @@
 
                 @foreach (var item in chatMessages)
                 {
-                    bool isUser = item.Role == "User";
+                    bool isUser = item.Role == "user";
                     <div style="display: flex; justify-content: @(isUser ? "flex-end" : "flex-start"); align-items: flex-end; gap: 8px;">
                         <div>
                             <div class="@(isUser ? "bubble-user" : "bubble-assistant")">
@@ -182,6 +194,15 @@
             <MudDivider Class="mb-3" />
 
             <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       FullWidth="true"
+                       Class="mb-2"
+                       OnClick="RefreshGroupTasks">
+                Обновить задания групп
+            </MudButton>
+
+            <MudButton Variant="Variant.Outlined"
                        Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.DeleteSweep"
                        FullWidth="true"
@@ -198,6 +219,8 @@
 
         </MudPaper>
     </MudItem>
+
+    <!-- Calendar column -->
     <MudItem xs="12" md="4" lg="3" Style="display: flex; flex-direction: column; background-color: var(--mud-palette-background-grey);">
         <MudPaper Class="pa-4 h-100">
             <MudText Typo="Typo.h4">Календарь</MudText>
@@ -219,21 +242,27 @@
                     <div class="calendar-day @(day.Month != _currentDate.Month ? "outside-month" : "") @(day.Date == DateTime.Today ? "today" : "")">
                         <div class="day-number">@day.Day</div>
                         <div class="tasks">
+                            @* Personal tasks — red / green *@
                             @foreach (var task in GetTasksForDay(day))
                             {
-                                if (task.IsDone == false)
-                                {
-                                    <span class="task-dot"></span>
-                                }
-                                else
-                                {
-                                    <span class="task-dot marked"></span>
-                                }
+                                <span class="task-dot @(task.IsDone ? "marked" : "")"></span>
+                            }
+                            @* Group tasks — gray *@
+                            @foreach (var _ in GetGroupTasksForDay(day))
+                            {
+                                <span class="group-task-dot"></span>
                             }
                         </div>
                     </div>
                 }
             </div>
+
+            @if (_groupTasks.Any())
+            {
+                <MudText Typo="Typo.caption" Class="mt-2" Style="opacity:0.6;">
+                    ● серые — задания из групп (@_groupTasks.Count)
+                </MudText>
+            }
         </MudPaper>
     </MudItem>
 </MudGrid>
@@ -245,22 +274,64 @@
     string model = string.Empty;
     string key = string.Empty;
     string url = string.Empty;
-    string systemPrompt = "You're an AI assistant attached to a to-do tasks app. You can add, remove, and update tasks. Tasks can have due dates. Today is " + DateTime.Today.ToString("yyyy-MM-dd") + ".";
     string errorMessage = string.Empty;
     double temperature = 0.7;
 
+    string studentAccessToken = string.Empty;
+
     private DateTime _currentDate = DateTime.Today;
     private List<TodoItem> _tasks = new();
+    private List<Services.GroupTaskItem> _groupTasks = new();
 
-    bool sendButton_IsEnabled => !isLoading && !string.IsNullOrWhiteSpace(prompt);
+    private string BuildSystemPrompt() =>
+        $"""
+        You are an AI assistant attached to a student task-tracker app. Today is {DateTime.Today:yyyy-MM-dd}.
+
+        PERSONAL TASKS (shown in the chat context)
+        You can add, remove, and update personal tasks that appear on the calendar as red/green dots.
+
+        GROUP TASKS (shown in the chat context as read-only context)
+        Group tasks are fetched automatically from the server and shown as GRAY dots on the calendar.
+        You cannot create or delete group tasks — only the teacher can do that.
+
+        STUDENT COMMANDS
+        When the user explicitly asks you to perform one of the following actions, reply with a
+        PLAIN TEXT explanation to the user AND append the corresponding command block at the very
+        end of your message (after all prose). Do not emit a command unless the user clearly
+        requested that action.
+
+        Supported commands (append verbatim at the end of your reply, one per action):
+
+        1. Join a group:
+           [CMD:JOIN_GROUP group_id=<id> invite_code=<code>]
+
+        2. Submit a solution for a task:
+           [CMD:SUBMIT_SOLUTION task_id=<id> text=<solution text here>]
+
+        Rules:
+        - Extract group_id, invite_code, task_id, and text from what the user tells you.
+        - If a required value is missing, ask the user for it instead of guessing.
+        - Only emit ONE command per reply.
+        - Do not wrap commands in code fences.
+        """;
 
     protected override void OnInitialized()
     {
-        _tasks.Add(new TodoItem { Title = "Task 1", DueDate = DateTime.Today.AddDays(2) });
-        _tasks.Add(new TodoItem { Title = "Task 2", DueDate = DateTime.Today.AddDays(2) });
-        _tasks.Add(new TodoItem { Title = "Task 3", IsDone = true, DueDate = DateTime.Today.AddDays(2) });
-        _tasks.Add(new TodoItem { Title = "Task 4", DueDate = DateTime.Today.AddDays(5) });
-        chatMessages.Add(new Services.ChatMessage { Role = "Assistant", Content = "Hello! Welcome to the task tracker app." });
+        chatMessages.Add(new Services.ChatMessage { Role = "assistant", Content = "Hello! Welcome to the task tracker app." });
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        string? refreshToken = await storageService.GetItemAsync<string>("refresh_token");
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            string accessToken = await profileService.GetAccessToken(refreshToken);
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                studentAccessToken = accessToken;
+                await RefreshGroupTasks(); // optionally load group tasks immediately
+            }
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -269,30 +340,168 @@
             "var el = document.getElementById('chat-scroll'); if(el) el.scrollTop = el.scrollHeight;");
     }
 
-    private void MoveMonth(int months)
-    {
-        _currentDate = _currentDate.AddMonths(months);
-    }
+    private void MoveMonth(int months) => _currentDate = _currentDate.AddMonths(months);
 
     private IEnumerable<DateTime> GetDaysInMonth()
     {
         var firstDayOfMonth = new DateTime(_currentDate.Year, _currentDate.Month, 1);
         int daysToSubtract = (int)firstDayOfMonth.DayOfWeek;
         var firstDayOfCalendar = firstDayOfMonth.AddDays(-daysToSubtract);
-
-        var calendarDays = new List<DateTime>();
-        for(int i = 0; i < 42; i++)
-        {
-            calendarDays.Add(firstDayOfCalendar.AddDays(i));
-        }
-        return calendarDays;
+        for (int i = 0; i < 42; i++)
+            yield return firstDayOfCalendar.AddDays(i);
     }
 
-    private List<TodoItem> GetTasksForDay(DateTime day)
+    private List<TodoItem> GetTasksForDay(DateTime day) =>
+        _tasks.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date == day.Date).ToList();
+
+    private List<Services.GroupTaskItem> GetGroupTasksForDay(DateTime day) =>
+        _groupTasks.Where(t => t.ExpirationDate.HasValue && t.ExpirationDate.Value.Date == day.Date).ToList();
+
+    private async Task RefreshGroupTasks()
     {
-        return _tasks.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date == day.Date).ToList();
+        if (string.IsNullOrWhiteSpace(studentAccessToken)) return;
+        _groupTasks = await profileService.GetAllStudentGroupTasks(studentAccessToken);
+        StateHasChanged();
     }
 
+    private string GetPersonalTaskContext(bool getTicked = false)
+    {
+        var tasksToShow = _tasks.Where(t => t.IsDone == getTicked);
+        if (!tasksToShow.Any()) return "No tasks.";
+
+        var sb = new StringBuilder();
+        foreach (var task in tasksToShow)
+        {
+            sb.Append(task.Title);
+            if (task.DueDate.HasValue)
+                sb.Append($" (due: {task.DueDate.Value:yyyy-MM-dd})");
+            sb.Append("; ");
+        }
+        return sb.ToString();
+    }
+
+    private string GetGroupTaskContext()
+    {
+        if (!_groupTasks.Any()) return "No group tasks.";
+        var sb = new StringBuilder();
+        foreach (var gt in _groupTasks)
+        {
+            sb.Append($"[Group: {gt.GroupName}, Task ID: {gt.TaskId}] {gt.Title}");
+            if (gt.ExpirationDate.HasValue)
+                sb.Append($" (due: {gt.ExpirationDate.Value:yyyy-MM-dd})");
+            sb.Append("; ");
+        }
+        return sb.ToString();
+    }
+
+    // Command parser & executor
+    /// <summary>
+    /// Scans the AI reply for [CMD:...] blocks, executes them, and returns
+    /// a status string to append to the assistant message (or empty string).
+    /// The original command token is stripped from displayContent.
+    /// </summary>
+    private async Task<(string CleanContent, string StatusLine)> ProcessCommands(string rawContent)
+    {
+        const string joinPrefix = "[CMD:JOIN_GROUP ";
+        const string submitPrefix = "[CMD:SUBMIT_SOLUTION ";
+
+        string clean = rawContent;
+        string status = string.Empty;
+
+        // Join group
+        int joinStart = rawContent.IndexOf(joinPrefix);
+        if (joinStart >= 0)
+        {
+            int joinEnd = rawContent.IndexOf(']', joinStart);
+            if (joinEnd > joinStart)
+            {
+                string cmdBody = rawContent.Substring(joinStart + joinPrefix.Length, joinEnd - joinStart - joinPrefix.Length);
+                clean = rawContent.Remove(joinStart, joinEnd - joinStart + 1).Trim();
+
+                int groupId = ExtractInt(cmdBody, "group_id");
+                string inviteCode = ExtractString(cmdBody, "invite_code");
+
+                if (groupId > 0 && !string.IsNullOrEmpty(inviteCode) && !string.IsNullOrEmpty(studentAccessToken))
+                {
+                    var (success, msg) = await profileService.JoinGroup(studentAccessToken, groupId, inviteCode);
+                    if (success)
+                    {
+                        status = $"\nВы успешно вступили в группу {groupId}.";
+                        await RefreshGroupTasks(); // pull new group's tasks onto the calendar
+                    }
+                    else
+                    {
+                        status = $"\nОшибка вступления в группу: {msg}";
+                    }
+                }
+                else
+                {
+                    status = "\nДля команды JOIN_GROUP нужен токен студента, group_id и invite_code.";
+                }
+            }
+        }
+
+        // Submit solution
+        int submitStart = rawContent.IndexOf(submitPrefix);
+        if (submitStart >= 0)
+        {
+            int submitEnd = rawContent.IndexOf(']', submitStart);
+            if (submitEnd > submitStart)
+            {
+                string cmdBody = rawContent.Substring(submitStart + submitPrefix.Length, submitEnd - submitStart - submitPrefix.Length);
+                clean = rawContent.Remove(submitStart, submitEnd - submitStart + 1).Trim();
+
+                int taskId = ExtractInt(cmdBody, "task_id");
+                string solutionText = ExtractString(cmdBody, "text");
+
+                if (taskId > 0 && !string.IsNullOrEmpty(solutionText) && !string.IsNullOrEmpty(studentAccessToken))
+                {
+                    var (success, msg) = await profileService.SubmitSolution(studentAccessToken, taskId, solutionText);
+                    status = success
+                        ? $"\nРешение для задания {taskId} отправлено."
+                        : $"\nОшибка отправки решения: {msg}";
+                }
+                else
+                {
+                    status = "\nДля команды SUBMIT_SOLUTION нужен токен студента, task_id и text.";
+                }
+            }
+        }
+
+        return (clean, status);
+    }
+
+    // Parsing helpers
+    private static int ExtractInt(string body, string key)
+    {
+        // Looks for key=<value> where value is digits (stops at space or end)
+        string search = key + "=";
+        int idx = body.IndexOf(search);
+        if (idx < 0) return 0;
+        idx += search.Length;
+        int end = idx;
+        while (end < body.Length && char.IsDigit(body[end])) end++;
+        return int.TryParse(body.Substring(idx, end - idx), out int v) ? v : 0;
+    }
+
+    private static string ExtractString(string body, string key)
+    {
+        // Looks for key=<rest of string> (value runs to the next key= or end)
+        string search = key + "=";
+        int idx = body.IndexOf(search);
+        if (idx < 0) return string.Empty;
+        idx += search.Length;
+        // Value ends at the next recognized key or at the end
+        int end = body.Length;
+        foreach (var nextKey in new[] { " group_id=", " invite_code=", " task_id=", " text=" })
+        {
+            int ni = body.IndexOf(nextKey, idx);
+            if (ni > idx && ni < end) end = ni;
+        }
+        return body.Substring(idx, end - idx).Trim();
+    }
+
+    // Handle message sending
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter" && !e.ShiftKey)
@@ -307,28 +516,34 @@
 
     private async Task SendMessage()
     {
-        if (!sendButton_IsEnabled)
-            return;
+        if (isLoading || string.IsNullOrWhiteSpace(prompt)) return;
 
         isLoading = true;
         errorMessage = string.Empty;
 
-        chatMessages.Add(new Services.ChatMessage { Role = "User", Content = prompt.Trim() });
-        //prompt = string.Empty;
+        chatMessages.Add(new Services.ChatMessage { Role = "user", Content = prompt.Trim() });
         StateHasChanged();
 
         try
         {
-            var messages = new List<Services.ChatMessage>();
-            if (!string.IsNullOrWhiteSpace(systemPrompt))
-                messages.Add(new Services.ChatMessage { Role = "System", Content = systemPrompt });
+            var messages = new List<Services.ChatMessage>
+            {
+                new() { Role = "system", Content = BuildSystemPrompt() },
+                new() { Role = "assistant", Content = "Hello! Welcome to the task tracker app." },
+                new() { Role = "user",      Content = prompt.Trim() },
+                // Inject task context invisibly so the model knows what's there
+                new()
+                {
+                    Role = "system",
+                    Content = $"[App context — not shown to the user]\n" +
+                              $"Personal tasks (pending): {GetPersonalTaskContext()}\n" +
+                              $"Personal tasks (done): {GetPersonalTaskContext(true)}\n" +
+                              $"Group tasks (read-only): {GetGroupTaskContext()}\n" +
+                              $"Client date: {DateTime.Today:yyyy-MM-dd}"
+                }
+            };
 
-            //messages.AddRange(chatMessages);
-            messages.Add(new Services.ChatMessage { Role = "Assistant", Content = "Hello! Welcome to the task tracker app." });
-            messages.Add(new Services.ChatMessage { Role = "User", Content = prompt.Trim() });
-            messages.Add(new Services.ChatMessage { Role = "System", Content = $"This is context for current query. The User does not see this message. This message is automatically created by the app. Unmarked tasks: {GetContext()}.\r\n Marked done tasks: {GetContext(true)}" });
-
-            prompt = $"Client date: {DateTime.Today.ToString()}. Unmarked tasks: {GetContext()}.\r\n Marked done tasks: {GetContext(true)}";
+            prompt = string.Empty;
 
             var request = new Services.ChatCompletionRequest
             {
@@ -337,8 +552,9 @@
                 Temperature = temperature
             };
 
-            var response = await zhgutLlmService.GetChatCompletionAsync(
-                request: request, apiKey: key, baseUrl: url);
+            var response = await zhgutLlmService.GetChatCompletionAsync(request: request, apiKey: key, baseUrl: url);
+            //var response = new Services.ChatCompletionResponse();
+            //prompt = await zhgutLlmService.GetChatCompletionDebugAsync(request: request, apiKey: key, baseUrl: url);
 
             if (response == null)
             {
@@ -346,8 +562,13 @@
             }
             else
             {
-                var content = response.Choices[response.Choices.Count - 1].Message.Content;
-                chatMessages.Add(new Services.ChatMessage { Role = "Assistant", Content = content });
+                var rawContent = response.Choices[response.Choices.Count - 1].Message.Content;
+                var (cleanContent, statusLine) = await ProcessCommands(rawContent);
+                chatMessages.Add(new Services.ChatMessage
+                {
+                    Role = "assistant",
+                    Content = cleanContent + statusLine
+                });
             }
         }
         catch (Exception ex)
@@ -361,32 +582,10 @@
         }
     }
 
-    private string GetContext(bool getTicked = false)
-    {
-        var tasksToShow = _tasks.Where(t => t.IsDone == getTicked);
-        if (!tasksToShow.Any())
-        {
-            return "No tasks.";
-        }
-
-        var sb = new System.Text.StringBuilder();
-        foreach (var task in tasksToShow)
-        {
-            sb.Append(task.Title);
-            if (task.DueDate.HasValue)
-            {
-                sb.Append($" (due: {task.DueDate.Value.ToString("yyyy-MM-dd")})");
-            }
-            sb.Append("; ");
-        }
-        return sb.ToString();
-    }
-
     public class TodoItem
     {
-        public string Title { get; set; } = String.Empty;
+        public string Title { get; set; } = string.Empty;
         public bool IsDone { get; set; }
         public DateTime? DueDate { get; set; }
     }
-
 }
