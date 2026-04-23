@@ -8,7 +8,7 @@ namespace mpitfinal2026blazor.Services
 {
     public class ProfileService
     {
-        private const string baseUrl = "http://127.0.0.1:8000";
+        private const string baseUrl = "https://w29dq7t4-8000.euw.devtunnels.ms";
         private readonly HttpClient _httpClient;
 
         public ProfileService(HttpClient httpClient)
@@ -116,5 +116,70 @@ namespace mpitfinal2026blazor.Services
             }
         }
 
+        public async Task<string?> CreateGroup(string accessToken, string name)
+        {
+            var payload = new { name };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/groups/");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+            try
+            {
+                var jsonRequest = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+                request.Content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+                var response = await _httpClient.SendAsync(request);
+                return await response.Content.ReadAsStringAsync();
+            }
+            catch { return null; }
+        }
+
+        public async Task<string?> GetGroups(string accessToken)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/groups/");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            try
+            {
+                var response = await _httpClient.SendAsync(request);
+                return await response.Content.ReadAsStringAsync();
+            }
+            catch { return null; }
+        }
+            public async Task<string?> CreateTask(string accessToken, string title, int groupId, DateTime expirationDate)
+            {
+                var payload = new { title, group = groupId, expiration_date = expirationDate.ToString("yyyy-MM-ddTHH:mm:ss") };
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/tasks/");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                try
+                {
+                    var jsonRequest = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+                    request.Content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+                    var response = await _httpClient.SendAsync(request);
+                    return await response.Content.ReadAsStringAsync();
+                }
+                catch { return null; }
+            }
+
+            public async Task<string?> GetTasks(string accessToken, int groupId)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/tasks/?group={groupId}");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                try
+                {
+                    var response = await _httpClient.SendAsync(request);
+                    return await response.Content.ReadAsStringAsync();
+                }
+                catch { return null; }
+            }
+
+            public async Task<string?> GetSolutionsForTask(string accessToken, int taskId)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/solutions/?task={taskId}");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                try
+                {
+                    var response = await _httpClient.SendAsync(request);
+                    return await response.Content.ReadAsStringAsync();
+                }
+                catch { return null; }
+            }
+        }
     }
-}
