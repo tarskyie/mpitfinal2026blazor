@@ -258,8 +258,9 @@
     {
         _tasks.Add(new TodoItem { Title = "Task 1", DueDate = DateTime.Today.AddDays(2) });
         _tasks.Add(new TodoItem { Title = "Task 2", DueDate = DateTime.Today.AddDays(2) });
-        _tasks.Add(new TodoItem { Title = "Task 2", IsDone = true, DueDate = DateTime.Today.AddDays(2) });
-        _tasks.Add(new TodoItem { Title = "Task 3", DueDate = DateTime.Today.AddDays(5) });
+        _tasks.Add(new TodoItem { Title = "Task 3", IsDone = true, DueDate = DateTime.Today.AddDays(2) });
+        _tasks.Add(new TodoItem { Title = "Task 4", DueDate = DateTime.Today.AddDays(5) });
+        chatMessages.Add(new Services.ChatMessage { Role = "Assistant", Content = "Hello! Welcome to the task tracker app." });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -278,7 +279,7 @@
         var firstDayOfMonth = new DateTime(_currentDate.Year, _currentDate.Month, 1);
         int daysToSubtract = (int)firstDayOfMonth.DayOfWeek;
         var firstDayOfCalendar = firstDayOfMonth.AddDays(-daysToSubtract);
-        
+
         var calendarDays = new List<DateTime>();
         for(int i = 0; i < 42; i++)
         {
@@ -313,7 +314,7 @@
         errorMessage = string.Empty;
 
         chatMessages.Add(new Services.ChatMessage { Role = "User", Content = prompt.Trim() });
-        prompt = string.Empty;
+        //prompt = string.Empty;
         StateHasChanged();
 
         try
@@ -321,9 +322,13 @@
             var messages = new List<Services.ChatMessage>();
             if (!string.IsNullOrWhiteSpace(systemPrompt))
                 messages.Add(new Services.ChatMessage { Role = "System", Content = systemPrompt });
-            
-            messages.AddRange(chatMessages);
-            messages.Add(new Services.ChatMessage { Role = "System", Content = $"Current unticked tasks: {GetContext()}. Current ticked tasks: {GetContext(true)}" });
+
+            //messages.AddRange(chatMessages);
+            messages.Add(new Services.ChatMessage { Role = "Assistant", Content = "Hello! Welcome to the task tracker app." });
+            messages.Add(new Services.ChatMessage { Role = "User", Content = prompt.Trim() });
+            messages.Add(new Services.ChatMessage { Role = "System", Content = $"This is context for current query. The User does not see this message. This message is automatically created by the app. Unmarked tasks: {GetContext()}.\r\n Marked done tasks: {GetContext(true)}" });
+
+            prompt = $"Client date: {DateTime.Today.ToString()}. Unmarked tasks: {GetContext()}.\r\n Marked done tasks: {GetContext(true)}";
 
             var request = new Services.ChatCompletionRequest
             {
