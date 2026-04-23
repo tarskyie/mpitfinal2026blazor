@@ -1,0 +1,108 @@
+﻿@page "/register"
+@inject Services.ProfileService profileService
+@inject Services.StorageService storageService
+@inject ISnackbar Snackbar
+
+<div class="d-flex justify-content-center">
+    <MudPaper Elevation="4" Class="pa-8 mt-2 m-2" Style="border-radius: 16px; width: 400px;">
+        <MudStack Spacing="4">
+            <div class="text-center">
+                <MudText Typo="Typo.h4" GutterBottom="true">Регистрация</MudText>
+                <MudText Typo="Typo.body2">Придумайте свой аккаунт</MudText>
+            </div>
+
+            <MudTextField @bind-Value="_username" Label="Имя пользователя" Variant="Variant.Outlined"
+                          FullWidth />
+            <MudTextField @bind-Value="_password" Label="Пароль" Variant="Variant.Outlined"
+                          InputType="InputType.Password" FullWidth />
+            <MudTextField @bind-Value="_passwordConfirm" Label="Подтвердить пароль" Variant="Variant.Outlined"
+                          InputType="InputType.Password" FullWidth />
+            <MudTextField @bind-Value="_email" Label="E-mail" Variant="Variant.Outlined"
+                          FullWidth />
+            <MudTextField @bind-Value="_firstName" Label="Имя" Variant="Variant.Outlined"
+                          FullWidth />
+            <MudTextField @bind-Value="_lastName" Label="Фамилмя" Variant="Variant.Outlined"
+                          FullWidth />
+            <MudAutocomplete T="string"
+                             Label="Выберите роль"
+                             @bind-Value="_userType"
+                             SearchFunc="@Search" />
+
+            <MudButton Variant="Variant.Filled"
+                       Size="Size.Large"
+                       FullWidth="true"
+                       OnClick="Register_Onclick"
+                       Disabled="_isProcessing"
+                       Style="background-color: #F54328; color: white; border-radius: 25px; height: 50px;">
+                @if (_isProcessing)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else
+                {
+                    <MudText Style="color:#fff;">Войти</MudText>
+                }
+            </MudButton>
+
+            <div class="text-center mt-2">
+                <MudLink href="/register" Underline="Underline.None" Color="Color.Primary">Нет аккаунта? Зарегистрироваться</MudLink>
+            </div>
+        </MudStack>
+    </MudPaper>
+</div>
+
+@code {
+    string _username = string.Empty;
+    string _password = string.Empty;
+    string _passwordConfirm = string.Empty;
+    string _email = string.Empty;
+    string _firstName = string.Empty;
+    string _lastName = string.Empty;
+    string? _userType;
+    bool _isProcessing = false;
+    private string[] _options = { "Ученик", "Учитель", "Родитель" };
+    private string[] options = { "student", "teacher", "parent" };
+
+    protected override void OnInitialized()
+    {
+        _userType = _options[0];
+    }
+
+    private async Task Register_Onclick()
+    {
+        if (_password != _passwordConfirm)
+        {
+            Snackbar.Add("Пароли не совпадают", Severity.Error);
+            return;
+        }
+
+        _isProcessing = true;
+        try
+        {
+            string userType = options[_options.IndexOf(_userType)];
+            var response = await profileService.Register(_email, _username, _password, _firstName, _lastName, userType);
+
+            if (response?.StartsWith("success") == true)
+            {
+                Snackbar.Add("Аккаунт успешно создан", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(response ?? "Ошибка сервера", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Произошла непредвиденная ошибка: {ex}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task<IEnumerable<string>> Search(string value, CancellationToken token)
+    {
+        return _options;
+    }
+}

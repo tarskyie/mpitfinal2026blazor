@@ -1,0 +1,81 @@
+﻿@page "/login"
+@inject Services.ProfileService profileService
+@inject NavigationManager navigationManager
+@inject Services.StorageService storageService
+@inject ISnackbar Snackbar
+
+<div class="d-flex justify-content-center">
+    <MudPaper Elevation="4" Class="pa-8 mt-2 m-2" Style="border-radius: 16px; width: 400px;">
+        <MudStack Spacing="4">
+            <div class="text-center">
+                <MudText Typo="Typo.h4" GutterBottom="true">Вход</MudText>
+                <MudText Typo="Typo.body2">Введите свои данные для доступа к аккаунту</MudText>
+            </div>
+
+            <MudTextField @bind-Value="username" Label="Имя пользователя" Variant="Variant.Outlined"
+                          FullWidth />
+                    
+            <MudTextField @bind-Value="password" Label="Пароль" Variant="Variant.Outlined"
+                          InputType="InputType.Password" FullWidth />
+
+            <MudButton Variant="Variant.Filled"
+                       Size="Size.Large"
+                       FullWidth="true"
+                       OnClick="LogIn_Onclick"
+                       Disabled="_isProcessing"
+                       Style="background-color: #F54328; color: white; border-radius: 25px; height: 50px;">
+                @if (_isProcessing)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else
+                {
+                    <MudText Style="color:#fff;">Войти</MudText>
+                }
+            </MudButton>
+
+            <div class="text-center mt-2">
+                <MudLink href="/register" Underline="Underline.None" Color="Color.Primary">Нет аккаунта? Зарегистрироваться</MudLink>
+            </div>
+        </MudStack>
+    </MudPaper>
+</div>
+
+@code {
+    string username = string.Empty;
+    string password = string.Empty;
+    bool _isProcessing = false;
+
+    private async Task LogIn_Onclick()
+    {
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            Snackbar.Add("Пожалуйста, заполните все поля", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        try
+        {
+            string token = await profileService.LogIn(username, password);
+
+            if (!string.IsNullOrEmpty(token) && !token.StartsWith("nokey"))
+            {
+                await storageService.SetItemAsync("refresh", token);
+                navigationManager.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                Snackbar.Add(token, Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Произошла ошибка при подключении", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+}
