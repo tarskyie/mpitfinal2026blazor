@@ -1,6 +1,7 @@
-﻿@page "/"
+@page "/"
 @inject Services.ZhgutLlmService zhgutLlmService
 @inject IJSRuntime JS
+@using System.Text
 
 <style>
     .chat-messages-scroll {
@@ -10,6 +11,56 @@
         flex-direction: column;
         gap: 12px;
         padding: 8px 4px;
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 2px;
+    }
+
+    .calendar-day-header {
+        text-align: center;
+        font-weight: bold;
+        padding: 4px;
+    }
+
+    .calendar-day {
+        border: 1px solid #e0e0e0;
+        padding: 4px;
+        min-height: 60px;
+        position: relative;
+    }
+
+    .outside-month {
+        color: #bdbdbd;
+    }
+
+    .today {
+        background-color: #f0f0f0;
+    }
+
+    .day-number {
+        font-size: 0.8em;
+    }
+
+    .tasks {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-top: 4px;
+    }
+
+    .task-dot {
+        width: 6px;
+        height: 6px;
+        background-color: red;
+        border-radius: 50%;
+        margin: 1px;
+    }
+    
+    .marked {
+        background-color: green;
     }
 </style>
 
@@ -149,18 +200,40 @@
     </MudItem>
     <MudItem xs="12" md="4" lg="3" Style="display: flex; flex-direction: column; background-color: var(--mud-palette-background-grey);">
         <MudPaper Class="pa-4 h-100">
-            <MudText Typo="Typo.h4">Список задач</MudText>
+            <MudText Typo="Typo.h4">Календарь</MudText>
 
-            <MudTextField @bind-Value="_newTask" Label="Новая задача" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddTask" />
-    
-            <MudList T="TodoItem" Clickable="true">
-                @foreach (var task in _todoList)
+            <div class="d-flex justify-space-between align-center mb-4">
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="@(() => MoveMonth(-1))" />
+                <MudText Typo="Typo.h5">@_currentDate.ToString("MMMM yyyy")</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="@(() => MoveMonth(1))" />
+            </div>
+
+            <div class="calendar-grid">
+                @foreach (var dayName in new[] { "Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб" })
                 {
-                    <MudListItem>
-                        <MudCheckBox @bind-Value="task.IsDone" Label="@task.Title" />
-                    </MudListItem>
+                    <div class="calendar-day-header">@dayName</div>
                 }
-            </MudList>
+
+                @foreach (var day in GetDaysInMonth())
+                {
+                    <div class="calendar-day @(day.Month != _currentDate.Month ? "outside-month" : "") @(day.Date == DateTime.Today ? "today" : "")">
+                        <div class="day-number">@day.Day</div>
+                        <div class="tasks">
+                            @foreach (var task in GetTasksForDay(day))
+                            {
+                                if (task.IsDone == false)
+                                {
+                                    <span class="task-dot"></span>
+                                }
+                                else
+                                {
+                                    <span class="task-dot marked"></span>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
         </MudPaper>
     </MudItem>
 </MudGrid>
@@ -172,19 +245,51 @@
     string model = string.Empty;
     string key = string.Empty;
     string url = string.Empty;
-    string systemPrompt = "You're an AI assistant attached to a to-do tasks app.";
+    string systemPrompt = "You're an AI assistant attached to a to-do tasks app. You can add, remove, and update tasks. Tasks can have due dates. Today is " + DateTime.Today.ToString("yyyy-MM-dd") + ".";
     string errorMessage = string.Empty;
     double temperature = 0.7;
 
-    private string? _newTask;
-    private List<TodoItem> _todoList = new();
+    private DateTime _currentDate = DateTime.Today;
+    private List<TodoItem> _tasks = new();
 
     bool sendButton_IsEnabled => !isLoading && !string.IsNullOrWhiteSpace(prompt);
+
+    protected override void OnInitialized()
+    {
+        _tasks.Add(new TodoItem { Title = "Task 1", DueDate = DateTime.Today.AddDays(2) });
+        _tasks.Add(new TodoItem { Title = "Task 2", DueDate = DateTime.Today.AddDays(2) });
+        _tasks.Add(new TodoItem { Title = "Task 2", IsDone = true, DueDate = DateTime.Today.AddDays(2) });
+        _tasks.Add(new TodoItem { Title = "Task 3", DueDate = DateTime.Today.AddDays(5) });
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         await JS.InvokeVoidAsync("eval",
             "var el = document.getElementById('chat-scroll'); if(el) el.scrollTop = el.scrollHeight;");
+    }
+
+    private void MoveMonth(int months)
+    {
+        _currentDate = _currentDate.AddMonths(months);
+    }
+
+    private IEnumerable<DateTime> GetDaysInMonth()
+    {
+        var firstDayOfMonth = new DateTime(_currentDate.Year, _currentDate.Month, 1);
+        int daysToSubtract = (int)firstDayOfMonth.DayOfWeek;
+        var firstDayOfCalendar = firstDayOfMonth.AddDays(-daysToSubtract);
+        
+        var calendarDays = new List<DateTime>();
+        for(int i = 0; i < 42; i++)
+        {
+            calendarDays.Add(firstDayOfCalendar.AddDays(i));
+        }
+        return calendarDays;
+    }
+
+    private List<TodoItem> GetTasksForDay(DateTime day)
+    {
+        return _tasks.Where(t => t.DueDate.HasValue && t.DueDate.Value.Date == day.Date).ToList();
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -216,9 +321,9 @@
             var messages = new List<Services.ChatMessage>();
             if (!string.IsNullOrWhiteSpace(systemPrompt))
                 messages.Add(new Services.ChatMessage { Role = "System", Content = systemPrompt });
+            
             messages.AddRange(chatMessages);
-            messages.Add(new Services.ChatMessage { Role = "System", Content = $"Current unticked tasks: {GetContext()}. Current ticked tasks: {GetContext(getTicked: true)}" });
-            //prompt = messages[messages.Count - 1].ToString();
+            messages.Add(new Services.ChatMessage { Role = "System", Content = $"Current unticked tasks: {GetContext()}. Current ticked tasks: {GetContext(true)}" });
 
             var request = new Services.ChatCompletionRequest
             {
@@ -251,32 +356,32 @@
         }
     }
 
-    private void AddTask()
-    {
-        if (!string.IsNullOrWhiteSpace(_newTask))
-        {
-            _todoList.Add(new TodoItem { Title = _newTask });
-            _newTask = string.Empty;
-            //prompt = $"Current unticked tasks: {GetContext()}. Current ticked tasks: {GetContext(getTicked: true)}";
-            StateHasChanged(); 
-        }
-    }
-
     private string GetContext(bool getTicked = false)
     {
-        string res = string.Empty;
-        foreach (var task in _todoList)
+        var tasksToShow = _tasks.Where(t => t.IsDone == getTicked);
+        if (!tasksToShow.Any())
         {
-            if (task.IsDone != getTicked) { continue; }
-            res += task.Title + ";";
+            return "No tasks.";
         }
-        return res;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var task in tasksToShow)
+        {
+            sb.Append(task.Title);
+            if (task.DueDate.HasValue)
+            {
+                sb.Append($" (due: {task.DueDate.Value.ToString("yyyy-MM-dd")})");
+            }
+            sb.Append("; ");
+        }
+        return sb.ToString();
     }
 
     public class TodoItem
     {
         public string Title { get; set; } = String.Empty;
         public bool IsDone { get; set; }
+        public DateTime? DueDate { get; set; }
     }
 
 }
