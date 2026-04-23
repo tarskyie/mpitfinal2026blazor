@@ -61,12 +61,12 @@
 
             if (!string.IsNullOrEmpty(token) && !token.StartsWith("nokey"))
             {
-                await storageService.SetItemAsync("refresh", token);
+                await storageService.SetItemAsync("refresh_token", token);
                 navigationManager.NavigateTo("/", forceLoad: true);
             }
             else
             {
-                Snackbar.Add(token, Severity.Error);
+                Snackbar.Add("Неверные учетные данные", Severity.Error);
             }
         }
         catch (Exception)

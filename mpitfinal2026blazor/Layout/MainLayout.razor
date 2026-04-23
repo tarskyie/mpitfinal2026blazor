@@ -1,6 +1,10 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor
+@using mpitfinal2026blazor.Models;
+@using System.Text.Json;
 @inject NavigationManager navigationManager
+@inject Services.ProfileService profileService
+@inject Services.StorageService storageService
 
 <MudThemeProvider />
 <MudPopoverProvider />
@@ -33,7 +37,21 @@
     </MudAppBar>
 
     <MudDrawer id="nav-drawer" @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
-        <NavMenu />
+        @switch (user?.UserType)
+        {
+            case "teacher":
+                <TeacherNavMenu />
+                break;
+            case "parent":
+                <ParentNavMenu />
+                break;
+            case "student":
+                <StudentNavMenu />
+                break;
+            default:
+                <NavMenu />
+                break;
+        }
     </MudDrawer>
 
     <MudMainContent Class="pt-16 pa-4 flex-grow-1">
@@ -68,6 +86,7 @@
     private bool _drawerOpen = false;
     private bool isLoggedIn = false;
     private string name = string.Empty;
+    private User? user;
 
     protected override void OnInitialized()
     {
@@ -77,6 +96,24 @@
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
+        string? refreshToken = await storageService.GetItemAsync<string>("refresh_token");
+        if (refreshToken != null)
+        {
+            string accessToken = await profileService.GetAccessToken(refreshToken);
+            if(accessToken != string.Empty)
+            {
+                var userJson = await profileService.GetYourself(accessToken);
+                if (userJson != null)
+                {
+                    user = JsonSerializer.Deserialize<User>(userJson.ToString()!, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if(user != null)
+                    {
+                        isLoggedIn = true;
+                        name = user.FirstName;
+                    }
+                }
+            }
+        }
     }
 
     private void DrawerToggle()
@@ -91,7 +128,7 @@
 
     private async Task LogOut()
     {
-        // there's no function yet
+        await storageService.ClearAsync();
 
         navigationManager.NavigateTo("/", forceLoad: true);
     }
