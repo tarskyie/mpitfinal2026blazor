@@ -3,21 +3,20 @@
 @inject Services.StorageService storageService
 @using System.Text.Json
 
-<MudText Typo="Typo.h1">Страница учителя</MudText>
-<MudText Typo="Typo.h3">Группы</MudText>
+<MudText Typo="Typo.h3">Страница учителя</MudText>
+<MudText Typo="Typo.h5">Группы</MudText>
 <MudPaper Class="pa-4 h-25" Style="overflow: scroll;">
-    <MudText Typo="Typo.h4">Список задач</MudText>
+    <MudText Typo="Typo.h5">Список задач</MudText>
+    <MudTextField @bind-Value="_name" T="string" Label="Новая группа" Variant="Variant.Outlined"
+        Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddGroup" />
 
-    <MudTextField @bind-Value="_name" T="string" Label="Новая группа" Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddGroup" />
-
-
-        @foreach (var group in _groupList)
-        {
-            <div style="margin-bottom: 16px;">
-                <MudText Typo="Typo.h6">@group.Name (@group.InviteCode)</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => SelectGroup(group)">Выбрать</MudButton>
-            </div>
-        }
+    @foreach (var group in _groupList)
+    {
+        <div style="margin-bottom: 16px;">
+            <MudText Typo="Typo.h6">@group.Name (@group.InviteCode)</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => SelectGroup(group)">Выбрать</MudButton>
+        </div>
+    }
 </MudPaper>
 @statusText
 
@@ -56,20 +55,50 @@
                     <MudTh>Текст</MudTh>
                     <MudTh>Оценка</MudTh>
                     <MudTh>Дата сдачи</MudTh>
+                    <MudTh>Выставить оценку</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.StudentId</MudTd>
                     <MudTd>@context.Text</MudTd>
-                    <MudTd>@context.Grade</MudTd>
+                    <MudTd>
+                        @if (context.Grade.HasValue)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">@context.Grade</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="Color.Default" Size="Size.Small">—</MudChip>
+                        }
+                    </MudTd>
                     <MudTd>@context.SubmittedAt.ToString("g")</MudTd>
+                    <MudTd>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <MudNumericField T="int?"
+                                Value="@_pendingGrades.GetValueOrDefault(context.Id)"
+                                ValueChanged="@((int? v) => _pendingGrades[context.Id] = v)"
+                                Label="Оценка" Min="1" Max="5"
+                                Style="width: 90px;" />
+                            <MudButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                Disabled="@(!_pendingGrades.ContainsKey(context.Id) || !_pendingGrades[context.Id].HasValue)"
+                                OnClick="() => GradeSolution(context)">
+                                Сохранить
+                            </MudButton>
+                        </div>
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
+            @if (!string.IsNullOrEmpty(_gradeStatusText))
+            {
+                <MudAlert Severity="@_gradeAlertSeverity" Class="mt-2">@_gradeStatusText</MudAlert>
+            }
         </MudPaper>
     }
 </MudPaper>
 
 @code {
-    List<Group> _groupList;
+    List<Group> _groupList = new();
     string _name = string.Empty;
     string? statusText = string.Empty;
     string accessToken = string.Empty;
@@ -82,11 +111,17 @@
     List<mpitfinal2026blazor.Models.SolutionModel> _solutions = new();
     bool solutionsVisible = false;
 
+    // Grading state: maps solution ID → pending grade value
+    Dictionary<int, int?> _pendingGrades = new();
+    string _gradeStatusText = string.Empty;
+    Severity _gradeAlertSeverity = Severity.Normal;
+
     protected override void OnInitialized()
     {
         base.OnInitialized();
         _groupList = new List<Group>();
     }
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
@@ -103,10 +138,9 @@
                     {
                         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
                     };
-
                     _groupList = JsonSerializer.Deserialize<List<Group>>(statusText, options);
                     statusText = "Deserialization complete.";
-                } 
+                }
                 catch (Exception ex)
                 {
                     statusText += "An error has occured: " + ex.Message;
@@ -127,12 +161,14 @@
         await LoadTasks();
         StateHasChanged();
     }
+
     private void ClearSelectedGroup()
     {
         selectedGroup = null;
         _tasks.Clear();
         solutionsVisible = false;
     }
+
     private async Task LoadTasks()
     {
         if (selectedGroup == null) return;
@@ -147,6 +183,7 @@
             catch { _tasks = new(); }
         }
     }
+
     private async void CreateTask()
     {
         if (selectedGroup == null) return;
@@ -156,9 +193,12 @@
         _taskDeadline = DateTime.Today;
         StateHasChanged();
     }
+
     private async void ViewSolutions(mpitfinal2026blazor.Models.TaskModel task)
     {
         _selectedTask = task;
+        _pendingGrades.Clear();
+        _gradeStatusText = string.Empty;
         var json = await profileService.GetSolutionsForTask(accessToken, task.Id);
         if (json != null)
         {
@@ -166,16 +206,44 @@
             {
                 var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
                 _solutions = JsonSerializer.Deserialize<List<mpitfinal2026blazor.Models.SolutionModel>>(json, options) ?? new();
+                // Pre-fill pending grades with existing grades so teacher sees current value
+                foreach (var s in _solutions)
+                    if (s.Grade.HasValue)
+                        _pendingGrades[s.Id] = s.Grade;
                 solutionsVisible = true;
             }
             catch { _solutions = new(); solutionsVisible = false; }
         }
+        StateHasChanged();
     }
+
     private void HideSolutions()
     {
         solutionsVisible = false;
         _selectedTask = null;
         _solutions.Clear();
+        _pendingGrades.Clear();
+        _gradeStatusText = string.Empty;
+    }
+
+    private async Task GradeSolution(mpitfinal2026blazor.Models.SolutionModel solution)
+    {
+        if (!_pendingGrades.TryGetValue(solution.Id, out var grade) || !grade.HasValue)
+            return;
+
+        var result = await profileService.GradeSolution(accessToken, solution.Id, grade.Value);
+        if (result)
+        {
+            solution.Grade = grade;
+            _gradeStatusText = $"Оценка {grade} сохранена для студента {solution.StudentId}.";
+            _gradeAlertSeverity = Severity.Success;
+        }
+        else
+        {
+            _gradeStatusText = "Не удалось сохранить оценку. Попробуйте ещё раз.";
+            _gradeAlertSeverity = Severity.Error;
+        }
+        StateHasChanged();
     }
 
     private void OnDeadlineChanged(DateTime? date)

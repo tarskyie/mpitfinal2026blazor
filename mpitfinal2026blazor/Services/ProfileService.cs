@@ -1,8 +1,9 @@
 ﻿using System.Globalization;
-using System.Text;
-using System.Text.Json;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.AccessControl;
+using System.Text;
+using System.Text.Json;
 
 namespace mpitfinal2026blazor.Services
 {
@@ -259,6 +260,16 @@ namespace mpitfinal2026blazor.Services
                 return (response.IsSuccessStatusCode, body);
             }
             catch (Exception ex) { return (false, ex.Message); }
+        }
+
+        public async Task<bool> GradeSolution(string accessToken, int solutionId, int grade)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Patch, $"{baseUrl}/api/solutions/{solutionId}/");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Content = JsonContent.Create(new { grade });
+
+            var response = await _httpClient.SendAsync(request);
+            return response.IsSuccessStatusCode;
         }
     }
 
