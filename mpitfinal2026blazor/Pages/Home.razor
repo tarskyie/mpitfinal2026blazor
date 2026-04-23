@@ -276,7 +276,8 @@
     string url = string.Empty;
     string errorMessage = string.Empty;
     double temperature = 0.7;
-
+    
+    string? refreshToken;
     string studentAccessToken = string.Empty;
 
     private DateTime _currentDate = DateTime.Today;
@@ -322,7 +323,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        string? refreshToken = await storageService.GetItemAsync<string>("refresh_token");
+        refreshToken = await storageService.GetItemAsync<string>("refresh_token");
         if (!string.IsNullOrEmpty(refreshToken))
         {
             string accessToken = await profileService.GetAccessToken(refreshToken);
@@ -544,6 +545,16 @@
             };
 
             prompt = string.Empty;
+
+            if (!string.IsNullOrEmpty(refreshToken))
+            {
+                string accessToken = await profileService.GetAccessToken(refreshToken);
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    studentAccessToken = accessToken;
+                    await RefreshGroupTasks(); // optionally load group tasks immediately
+                }
+            }
 
             var request = new Services.ChatCompletionRequest
             {
