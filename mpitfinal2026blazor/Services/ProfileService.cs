@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using mpitfinal2026blazor.Models;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.AccessControl;
@@ -225,6 +226,11 @@ namespace mpitfinal2026blazor.Services
 
                 foreach (var t in tasks)
                 {
+                    if (t.GetProperty("group").GetInt32() != groupId)
+                    {
+                        continue;
+                    }
+
                     int taskId = t.GetProperty("id").GetInt32();
                     string title = t.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
                     DateTime? expDate = null;
@@ -270,6 +276,23 @@ namespace mpitfinal2026blazor.Services
 
             var response = await _httpClient.SendAsync(request);
             return response.IsSuccessStatusCode;
+        }
+
+        public async Task<List<SolutionModel>> GetMySolutions(string accessToken) {
+            List<SolutionModel> solutions = new List<SolutionModel>();
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/solutions/");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            
+            try
+            {
+                var response = await _httpClient.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
+
+                solutions = JsonSerializer.Deserialize<List<SolutionModel>>(body) ?? new List<SolutionModel>();
+            }
+            catch { }
+
+            return solutions;
         }
     }
 

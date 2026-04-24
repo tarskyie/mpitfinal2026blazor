@@ -66,13 +66,8 @@
         background-color: green;
     }
 
-    /* Gray dot style for group tasks */
-    .group-task-dot {
-        width: 6px;
-        height: 6px;
-        background-color: #9e9e9e;
-        border-radius: 50%;
-        margin: 1px;
+    .group {
+        background-color: gray;
     }
 </style>
 
@@ -250,7 +245,8 @@
                             @* Group tasks — gray *@
                             @foreach (var _ in GetGroupTasksForDay(day))
                             {
-                                <span class="group-task-dot"></span>
+                                
+                                <span class="task-dot group"></span>
                             }
                         </div>
                     </div>
@@ -260,7 +256,7 @@
             @if (_groupTasks.Any())
             {
                 <MudText Typo="Typo.caption" Class="mt-2" Style="opacity:0.6;">
-                    ● серые — задания из групп (@_groupTasks.Count)
+                    ● серые — задания из групп (их @_groupTasks.Count)
                 </MudText>
             }
         </MudPaper>
@@ -276,9 +272,10 @@
     string url = string.Empty;
     string errorMessage = string.Empty;
     double temperature = 0.7;
-    
+
     string? refreshToken;
     string studentAccessToken = string.Empty;
+    int? studentId;
 
     private DateTime _currentDate = DateTime.Today;
     private List<TodoItem> _tasks = new();
@@ -330,7 +327,14 @@
             if (!string.IsNullOrEmpty(accessToken))
             {
                 studentAccessToken = accessToken;
-                await RefreshGroupTasks(); // optionally load group tasks immediately
+                JsonElement? myself = await profileService.GetYourself(accessToken);
+                if (myself != null)
+                {
+                    JsonElement concreteMe = myself ?? default;
+                    studentId = concreteMe.GetProperty("id").GetInt32();
+                }
+
+                await RefreshGroupTasks();
             }
         }
     }
@@ -502,6 +506,18 @@
         return body.Substring(idx, end - idx).Trim();
     }
 
+    private async Task<string> GetSubmissions()
+    {
+        studentAccessToken = await profileService.GetAccessToken(refreshToken);
+        List<Models.SolutionModel> solutions = await profileService.GetMySolutions(studentAccessToken); 
+        string result = string.Empty;
+        foreach (var item in solutions)
+        {
+            result += $"(ID: {item.Id}) Task: {item.TaskId} Grade: {item.Grade};";
+        }
+        return result;
+    }
+
     // Handle message sending
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
@@ -540,11 +556,12 @@
                               $"Personal tasks (pending): {GetPersonalTaskContext()}\n" +
                               $"Personal tasks (done): {GetPersonalTaskContext(true)}\n" +
                               $"Group tasks (read-only): {GetGroupTaskContext()}\n" +
-                              $"Client date: {DateTime.Today:yyyy-MM-dd}"
+                              $"Client date: {DateTime.Today:yyyy-MM-dd}\n" +
+                              $"My submissions (all): {GetSubmissions()}"
                 }
             };
 
-            prompt = string.Empty;
+            prompt = await GetSubmissions();
 
             if (!string.IsNullOrEmpty(refreshToken))
             {

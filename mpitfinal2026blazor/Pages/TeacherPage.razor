@@ -1,107 +1,189 @@
 @page "/teacher"
 @inject Services.ProfileService profileService
 @inject Services.StorageService storageService
+@inject NavigationManager navigationManager
 @using System.Text.Json
 
-<MudText Typo="Typo.h3">Страница учителя</MudText>
-<MudText Typo="Typo.h5">Группы</MudText>
-<MudPaper Class="pa-4 h-25" Style="overflow: scroll;">
-    <MudText Typo="Typo.h5">Список задач</MudText>
-    <MudTextField @bind-Value="_name" T="string" Label="Новая группа" Variant="Variant.Outlined"
-        Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add" OnAdornmentClick="AddGroup" />
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
+    <MudText Typo="Typo.h3" GutterBottom="true">Страница учителя</MudText>
 
-    @foreach (var group in _groupList)
-    {
-        <div style="margin-bottom: 16px;">
-            <MudText Typo="Typo.h6">@group.Name (@group.InviteCode)</MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => SelectGroup(group)">Выбрать</MudButton>
-        </div>
-    }
-</MudPaper>
-@statusText
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="3" Class="pa-4 flex-grow-1" Style="height: 80vh; display: flex; flex-direction: column;">
+                <MudText Typo="Typo.h5" Class="mb-4">Группы</MudText>
 
-<MudPaper Class="pa-4 mt-4">
-    @if (selectedGroup != null)
-    {
-        <MudText Typo="Typo.h5">Задачи группы: @selectedGroup.Name</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="ClearSelectedGroup">Скрыть</MudButton>
-        <MudTable Items="_tasks">
-            <HeaderContent>
-                <MudTh>Название</MudTh>
-                <MudTh>Дедлайн</MudTh>
-                <MudTh>Действия</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>@context.Title</MudTd>
-                <MudTd>@context.ExpirationDate.ToString("yyyy-MM-dd")</MudTd>
-                <MudTd>
-                    <MudButton Variant="Variant.Outlined" OnClick="() => ViewSolutions(context)">Решения</MudButton>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-        <MudTextField @bind-Value="_taskTitle" Label="Название задачи" />
-        <MudDatePicker Date="_taskDeadline" DateChanged="@((DateTime? date) => OnDeadlineChanged(date))" Label="Дедлайн" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateTask">Создать задачу</MudButton>
-    }
+                <MudTextField @bind-Value="_name" T="string"
+                              Label="Название новой группы"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.Add"
+                              OnAdornmentClick="AddGroup"
+                              Class="mb-1" />
 
-    @if (solutionsVisible)
-    {
-        <MudPaper Class="pa-4 mt-2">
-            <MudText Typo="Typo.h6">Решения задачи: @_selectedTask?.Title</MudText>
-            <MudButton Variant="Variant.Text" OnClick="HideSolutions">Скрыть решения</MudButton>
-            <MudTable Items="_solutions">
-                <HeaderContent>
-                    <MudTh>Ученик</MudTh>
-                    <MudTh>Текст</MudTh>
-                    <MudTh>Оценка</MudTh>
-                    <MudTh>Дата сдачи</MudTh>
-                    <MudTh>Выставить оценку</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>@context.StudentId</MudTd>
-                    <MudTd>@context.Text</MudTd>
-                    <MudTd>
-                        @if (context.Grade.HasValue)
+                <div style="overflow-y: auto; flex-grow: 1;">
+                    @foreach (var group in _groupList)
+                    {
+                        @if (group.Teacher != teacherId)
                         {
-                            <MudChip T="string" Color="Color.Success" Size="Size.Small">@context.Grade</MudChip>
+                            continue;
                         }
-                        else
-                        {
-                            <MudChip T="string" Color="Color.Default" Size="Size.Small">—</MudChip>
-                        }
-                    </MudTd>
-                    <MudTd>@context.SubmittedAt.ToString("g")</MudTd>
-                    <MudTd>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <MudNumericField T="int?"
-                                Value="@_pendingGrades.GetValueOrDefault(context.Id)"
-                                ValueChanged="@((int? v) => _pendingGrades[context.Id] = v)"
-                                Label="Оценка" Min="1" Max="5"
-                                Style="width: 90px;" />
-                            <MudButton Variant="Variant.Filled"
-                                Color="Color.Primary"
-                                Size="Size.Small"
-                                Disabled="@(!_pendingGrades.ContainsKey(context.Id) || !_pendingGrades[context.Id].HasValue)"
-                                OnClick="() => GradeSolution(context)">
-                                Сохранить
-                            </MudButton>
-                        </div>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-            @if (!string.IsNullOrEmpty(_gradeStatusText))
+
+                        <MudCard Elevation="@(selectedGroup?.Id == group.Id ? 6 : 1)"
+                                 Class="@($"mb-3 {(selectedGroup?.Id == group.Id ? "border-solid border-2 mud-border-primary" : "")}")"
+                                 @onclick="() => SelectGroup(group)"
+                                 Style="cursor: pointer; transition: 0.3s;">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">@group.Name (ID: @group.Id)</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Код приглашения: @group.InviteCode</MudText>
+                                </CardHeaderContent>
+                                <CardHeaderActions>
+                                    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" />
+                                </CardHeaderActions>
+                            </MudCardHeader>
+                        </MudCard>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(statusText))
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">@statusText</MudAlert>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8">
+            @if (selectedGroup != null)
             {
-                <MudAlert Severity="@_gradeAlertSeverity" Class="mt-2">@_gradeStatusText</MudAlert>
+                <MudPaper Elevation="3" Class="pa-6">
+                    <div class="d-flex align-center justify-space-between mb-6">
+                        <div>
+                            <MudText Typo="Typo.h4">@selectedGroup.Name</MudText>
+                            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">Управление задачами и проверка решений</MudText>
+                        </div>
+                        <MudButton StartIcon="@Icons.Material.Filled.Close" Variant="Variant.Text" Color="Color.Error" OnClick="ClearSelectedGroup">Закрыть</MudButton>
+                    </div>
+
+                    <MudTabs Elevation="0" Outlined="true" PanelClass="pa-4">
+                        <MudTabPanel Text="Задачи" Icon="@Icons.Material.Filled.List">
+                            <MudTable Items="_tasks" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0">
+                                <HeaderContent>
+                                    <MudTh>Название</MudTh>
+                                    <MudTh>Дедлайн</MudTh>
+                                    <MudTh>Действия</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Название">@context.Title</MudTd>
+                                    <MudTd DataLabel="Дедлайн">
+                                        <MudChip T="string" Icon="@Icons.Material.Filled.Event" Size="Size.Small">
+                                            @context.ExpirationDate.ToString("yyyy-MM-dd")
+                                        </MudChip>
+                                    </MudTd>
+                                    <MudTd>
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="Color.Info"
+                                                   Size="Size.Small"
+                                                   OnClick="() => ViewSolutions(context)">Решения</MudButton>
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+
+                            <MudPaper Variant="Variant.Outlined" Class="pa-4 mt-6">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">Создать новую задачу</MudText>
+                                <MudGrid Spacing="2" Justify="Justify.FlexEnd">
+                                    <MudItem xs="12" sm="6">
+                                        <MudTextField @bind-Value="_taskTitle" Label="Название задачи" Variant="Variant.Filled" Margin="Margin.Dense" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="4">
+                                        <MudDatePicker Date="_taskDeadline"
+                                                       DateChanged="@((DateTime? date) => OnDeadlineChanged(date))"
+                                                       Label="Дедлайн"
+                                                       Variant="Variant.Filled"
+                                                       Margin="Margin.Dense" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="2" Class="d-flex align-center">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="CreateTask">Добавить</MudButton>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        </MudTabPanel>
+                    </MudTabs>
+
+                    @if (solutionsVisible)
+                    {
+                        <MudCard Elevation="4" Class="mt-6 animated fadeIn" Style="border-top: 4px solid var(--mud-palette-primary);">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">Проверка решений: @_selectedTask?.Title</MudText>
+                                </CardHeaderContent>
+                                <CardHeaderActions>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="HideSolutions" />
+                                </CardHeaderActions>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudTable Items="_solutions" Dense="true" Hover="true" Elevation="0">
+                                    <HeaderContent>
+                                        <MudTh>Студент</MudTh>
+                                        <MudTh>Текст</MudTh>
+                                        <MudTh>Статус</MudTh>
+                                        <MudTh>Дата</MudTh>
+                                        <MudTh Style="width: 200px;">Оценка</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd>@context.StudentId</MudTd>
+                                        <MudTd>@context.Text</MudTd>
+                                        <MudTd>
+                                            @if (context.Grade.HasValue)
+                                            {
+                                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">Оценено: @context.Grade</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Text">Ожидает</MudChip>
+                                            }
+                                        </MudTd>
+                                        <MudTd>@context.SubmittedAt.ToString("g")</MudTd>
+                                        <MudTd>
+                                            <div class="d-flex align-center gap-2">
+                                                <MudNumericField T="int?"
+                                                                 Value="@_pendingGrades.GetValueOrDefault(context.Id)"
+                                                                 ValueChanged="@((int? v) => _pendingGrades[context.Id] = v)"
+                                                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                                 Min="1" Max="5" Style="width: 60px;" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                                               Color="Color.Primary"
+                                                               Disabled="@(!_pendingGrades.ContainsKey(context.Id) || !_pendingGrades[context.Id].HasValue)"
+                                                               OnClick="() => GradeSolution(context)" />
+                                            </div>
+                                        </MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                                @if (!string.IsNullOrEmpty(_gradeStatusText))
+                                {
+                                    <MudAlert Severity="@_gradeAlertSeverity" Class="mt-4" Variant="Variant.Outlined" Dense="true">@_gradeStatusText</MudAlert>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                </MudPaper>
             }
-        </MudPaper>
-    }
-</MudPaper>
+            else
+            {
+                <div class="d-flex flex-column align-center justify-center mud-height-full" style="opacity: 0.5; min-height: 400px;">
+                    <MudText Typo="Typo.h5">Выберите группу из списка, чтобы начать работу</MudText>
+                </div>
+            }
+        </MudItem>
+    </MudGrid>
+</MudContainer>
 
 @code {
     List<Group> _groupList = new();
     string _name = string.Empty;
     string? statusText = string.Empty;
     string accessToken = string.Empty;
+    int? teacherId;
 
     Group? selectedGroup = null;
     List<mpitfinal2026blazor.Models.TaskModel> _tasks = new();
@@ -129,6 +211,16 @@
         if (refreshToken != null)
         {
             accessToken = await profileService.GetAccessToken(refreshToken);
+
+            JsonElement? myself = await profileService.GetYourself(accessToken);
+            if (myself == null)
+            {
+                navigationManager.NavigateTo("/");
+                return;
+            }
+            JsonElement concreteMe = myself ?? default;
+            teacherId = concreteMe.GetProperty("id").GetInt32();
+
             statusText = await profileService.GetGroups(accessToken);
             if (statusText != null)
             {
@@ -138,7 +230,7 @@
                     {
                         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
                     };
-                    _groupList = JsonSerializer.Deserialize<List<Group>>(statusText, options);
+                    _groupList.AddRange(JsonSerializer.Deserialize<List<Group>>(statusText, options) ?? new());
                     statusText = "Deserialization complete.";
                 }
                 catch (Exception ex)
