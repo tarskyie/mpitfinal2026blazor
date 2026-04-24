@@ -282,7 +282,7 @@ namespace mpitfinal2026blazor.Services
             List<SolutionModel> solutions = new List<SolutionModel>();
             var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/solutions/");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            
+
             try
             {
                 var response = await _httpClient.SendAsync(request);
@@ -294,6 +294,83 @@ namespace mpitfinal2026blazor.Services
 
             return solutions;
         }
+
+        public async Task<List<GroupTaskItem>> GetParentStudentTasks(string accessToken)
+        {
+            var result = new List<GroupTaskItem>();
+
+            var groupsJson = await GetGroups(accessToken);
+            if (string.IsNullOrEmpty(groupsJson)) return result;
+
+            List<JsonElement> groups;
+            try { groups = JsonSerializer.Deserialize<List<JsonElement>>(groupsJson) ?? new(); }
+            catch { return result; }
+
+            foreach (var g in groups)
+            {
+                int groupId = g.GetProperty("id").GetInt32();
+                string groupName = g.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+
+                var tasksJson = await GetTasks(accessToken, groupId);
+                if (string.IsNullOrEmpty(tasksJson)) continue;
+
+                List<JsonElement> tasks;
+                try { tasks = JsonSerializer.Deserialize<List<JsonElement>>(tasksJson) ?? new(); }
+                catch { continue; }
+
+                foreach (var t in tasks)
+                {
+                    if (t.GetProperty("group").GetInt32() != groupId)
+                    {
+                        continue;
+                    }
+
+                    int taskId = t.GetProperty("id").GetInt32();
+                    string title = t.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
+                    DateTime? expDate = null;
+                    if (t.TryGetProperty("expiration_date", out var ed) && ed.ValueKind != JsonValueKind.Null
+                        && DateTime.TryParse(ed.GetString(), out var parsedDate))
+                        expDate = parsedDate;
+
+                    var solutionsJson = await GetSolutionsForTask(accessToken, taskId);
+                    string status = "not done";
+
+                    if (!string.IsNullOrEmpty(solutionsJson))
+                    {
+                        try
+                        {
+                            var solutions = JsonSerializer.Deserialize<List<SolutionModel>>(solutionsJson) ?? new();
+                            var solution = solutions.FirstOrDefault();
+                            if (solution != null && solution.Grade.HasValue)
+                            {
+                                status = solution.Grade.Value.ToString();
+                            }
+                            else if (expDate.HasValue && expDate < DateTime.UtcNow)
+                            {
+                                status = "expired";
+                            }
+                        }
+                        catch { }
+                    }
+                    else if (expDate.HasValue && expDate < DateTime.UtcNow)
+                    {
+                        status = "expired";
+                    }
+
+                    result.Add(new GroupTaskItem
+                    {
+                        TaskId = taskId,
+                        Title = title,
+                        GroupId = groupId,
+                        GroupName = groupName,
+                        ExpirationDate = expDate,
+                        Status = status
+                    });
+                }
+            }
+
+            return result;
+        }
     }
 
     public class GroupTaskItem
@@ -303,5 +380,6 @@ namespace mpitfinal2026blazor.Services
         public int GroupId { get; set; }
         public string GroupName { get; set; } = "";
         public DateTime? ExpirationDate { get; set; }
+        public string Status { get; set; } = "not done";
     }
 }

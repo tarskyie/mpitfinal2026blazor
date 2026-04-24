@@ -1,3 +1,181 @@
 @page "/parent"
+@inject Services.ProfileService profileService
+@inject Services.StorageService storageService
+@inject NavigationManager navigationManager
+@using System.Text.Json
 
-<h1>Parent Page</h1>
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
+    <MudText Typo="Typo.h3" GutterBottom="true">Страница родителя</MudText>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular IsIndeterminate="true" />
+        <MudText>Загрузка данных...</MudText>
+    }
+    else if (_studentInfo == null)
+    {
+        <MudAlert Severity="Severity.Error">Ошибка: Связь с ребёнком не найдена</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12">
+                <MudPaper Elevation="3" Class="pa-6 mb-6">
+                    <MudText Typo="Typo.h5" GutterBottom="true">Информация об ученике</MudText>
+                    <MudStack Spacing="2">
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Имя:</MudText>
+                            <MudText Typo="Typo.body1">@_studentInfo.FirstName @_studentInfo.LastName</MudText>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Email:</MudText>
+                            <MudText Typo="Typo.body1">@_studentInfo.Email</MudText>
+                        </div>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudPaper Elevation="3" Class="pa-6">
+                    <MudText Typo="Typo.h5" GutterBottom="true">Задачи ученика</MudText>
+
+                    @if (_tasks.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info">Нет задач для школьника</MudAlert>
+                    }
+                    else
+                    {
+                        <MudTable Items="_tasks" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Группа</MudTh>
+                                <MudTh>Задача</MudTh>
+                                <MudTh>Дедлайн</MudTh>
+                                <MudTh>Статус</MudTh>
+                                <MudTh>Оценка</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Группа">@context.GroupName</MudTd>
+                                <MudTd DataLabel="Задача">@context.Title</MudTd>
+                                <MudTd DataLabel="Дедлайн">
+                                    <MudChip T="string" Icon="@Icons.Material.Filled.Event" Size="Size.Small">
+                                        @(context.ExpirationDate.HasValue ? context.ExpirationDate.Value.ToString("yyyy-MM-dd") : "N/A")
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Статус">
+                                    @{
+                                        var statusChip = GetStatusChip(context.Status);
+                                    }
+                                    <MudChip T="string" Color="@statusChip.Color" Size="Size.Small" Icon="@statusChip.Icon">
+                                        @statusChip.Text
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Оценка">
+                                    @if (int.TryParse(context.Status, out var grade) && grade >= 0)
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">@grade</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+    @code {
+    private bool _isLoading = true;
+    private List<GroupTaskItem> _tasks = new();
+    private User? _studentInfo;
+    private string? _accessToken;
+    private JsonElement? _currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            string? refreshToken = await storageService.GetItemAsync<string>("refresh_token");
+
+            if (refreshToken == null)
+            {
+                navigationManager.NavigateTo("/login");
+                return;
+            }
+
+            _accessToken = await profileService.GetAccessToken(refreshToken);
+            if (string.IsNullOrEmpty(_accessToken))
+            {
+                navigationManager.NavigateTo("/login");
+                return;
+            }
+
+            _currentUser = await profileService.GetYourself(_accessToken);
+            if (_currentUser == null)
+            {
+                navigationManager.NavigateTo("/login");
+                return;
+            }
+
+            // Fetch student tasks - this would need a dedicated API endpoint
+            // For now, we'll attempt to load tasks if there's a relationship
+            await LoadStudentTasks();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading parent page: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadStudentTasks()
+    {
+        if (string.IsNullOrEmpty(_accessToken))
+            return;
+
+        try
+        {
+            // Get all tasks for the parent's student
+            _tasks = await profileService.GetParentStudentTasks(_accessToken);
+
+            // Try to get student info - this would require a dedicated endpoint
+            // For now, we'll use the current user info or placeholder
+            if (_currentUser.HasValue)
+            {
+                var user = _currentUser.Value;
+                _studentInfo = new User
+                {
+                    FirstName = user.TryGetProperty("first_name", out var fn) ? fn.GetString() ?? "Студент" : "Студент",
+                    LastName = user.TryGetProperty("last_name", out var ln) ? ln.GetString() ?? "Имя" : "Имя",
+                    Email = user.TryGetProperty("email", out var em) ? em.GetString() ?? "" : ""
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading tasks: {ex.Message}");
+        }
+    }
+
+    private (Color Color, string Icon, string Text) GetStatusChip(string status)
+    {
+        if (int.TryParse(status, out var grade) && grade >= 0)
+        {
+            return (Color.Success, Icons.Material.Filled.CheckCircle, $"Оценено: {grade}");
+        }
+
+        return status switch
+        {
+            "not done" => (Color.Warning, Icons.Material.Filled.HourglassEmpty, "Не выполнено"),
+            "expired" => (Color.Error, Icons.Material.Filled.Schedule, "Истекло"),
+            _ => (Color.Default, Icons.Material.Filled.Help, "Неизвестно")
+        };
+    }
+}
