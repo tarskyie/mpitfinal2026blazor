@@ -225,6 +225,11 @@ namespace mpitfinal2026blazor.Services
 
                 foreach (var t in tasks)
                 {
+                    if (t.GetProperty("group").GetInt32() != groupId)
+                    {
+                        continue;
+                    }
+
                     int taskId = t.GetProperty("id").GetInt32();
                     string title = t.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
                     DateTime? expDate = null;
