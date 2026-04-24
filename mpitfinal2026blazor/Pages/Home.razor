@@ -275,6 +275,7 @@
 
     string? refreshToken;
     string studentAccessToken = string.Empty;
+    int? studentId;
 
     private DateTime _currentDate = DateTime.Today;
     private List<TodoItem> _tasks = new();
@@ -326,6 +327,13 @@
             if (!string.IsNullOrEmpty(accessToken))
             {
                 studentAccessToken = accessToken;
+                JsonElement? myself = await profileService.GetYourself(accessToken);
+                if (myself != null)
+                {
+                    JsonElement concreteMe = myself ?? default;
+                    studentId = concreteMe.GetProperty("id").GetInt32();
+                }
+
                 await RefreshGroupTasks();
             }
         }
@@ -498,6 +506,18 @@
         return body.Substring(idx, end - idx).Trim();
     }
 
+    private async Task<string> GetSubmissions()
+    {
+        studentAccessToken = await profileService.GetAccessToken(refreshToken);
+        List<Models.SolutionModel> solutions = await profileService.GetMySolutions(studentAccessToken); 
+        string result = string.Empty;
+        foreach (var item in solutions)
+        {
+            result += $"(ID: {item.Id}) Task: {item.TaskId} Grade: {item.Grade};";
+        }
+        return result;
+    }
+
     // Handle message sending
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
@@ -536,11 +556,12 @@
                               $"Personal tasks (pending): {GetPersonalTaskContext()}\n" +
                               $"Personal tasks (done): {GetPersonalTaskContext(true)}\n" +
                               $"Group tasks (read-only): {GetGroupTaskContext()}\n" +
-                              $"Client date: {DateTime.Today:yyyy-MM-dd}"
+                              $"Client date: {DateTime.Today:yyyy-MM-dd}\n" +
+                              $"My submissions (all): {GetSubmissions()}"
                 }
             };
 
-            prompt = string.Empty;
+            prompt = await GetSubmissions();
 
             if (!string.IsNullOrEmpty(refreshToken))
             {

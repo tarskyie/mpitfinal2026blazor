@@ -280,6 +280,17 @@ namespace mpitfinal2026blazor.Services
 
         public async Task<List<SolutionModel>> GetMySolutions(string accessToken) {
             List<SolutionModel> solutions = new List<SolutionModel>();
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/solutions/");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            
+            try
+            {
+                var response = await _httpClient.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
+
+                solutions = JsonSerializer.Deserialize<List<SolutionModel>>(body) ?? new List<SolutionModel>();
+            }
+            catch { }
 
             return solutions;
         }
