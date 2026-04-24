@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using mpitfinal2026blazor.Models;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.AccessControl;
@@ -275,6 +276,12 @@ namespace mpitfinal2026blazor.Services
 
             var response = await _httpClient.SendAsync(request);
             return response.IsSuccessStatusCode;
+        }
+
+        public async Task<List<SolutionModel>> GetMySolutions(string accessToken) {
+            List<SolutionModel> solutions = new List<SolutionModel>();
+
+            return solutions;
         }
     }
 
