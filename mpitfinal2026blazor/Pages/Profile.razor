@@ -1,6 +1,7 @@
 ﻿@page "/profile"
 @inject ProfileService profileService
 @inject StorageService storageService
+@inject NavigationManager navigationManager
 @inject ISnackbar Snackbar
 
 <div class="d-flex justify-content-center">
@@ -49,6 +50,10 @@
                     user = System.Text.Json.JsonSerializer.Deserialize<User>(userJson.ToString()!, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 }
             }
+        }
+        else
+        {
+            navigationManager.NavigateTo("/login");
         }
         _isLoading = false;
     }
