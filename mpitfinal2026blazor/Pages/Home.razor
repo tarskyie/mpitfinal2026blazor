@@ -365,7 +365,8 @@
     private async Task RefreshGroupTasks()
     {
         if (string.IsNullOrWhiteSpace(studentAccessToken)) return;
-        _groupTasks = await profileService.GetAllStudentGroupTasks(studentAccessToken);
+        _groupTasks = await profileService.GetAllStudentGroupTasks(studentAccessToken, studentId);
+
         StateHasChanged();
     }
 

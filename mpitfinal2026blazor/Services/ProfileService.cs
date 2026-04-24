@@ -201,7 +201,7 @@ namespace mpitfinal2026blazor.Services
             catch (Exception ex) { return (false, ex.Message); }
         }
 
-        public async Task<List<GroupTaskItem>> GetAllStudentGroupTasks(string accessToken)
+        public async Task<List<GroupTaskItem>> GetAllStudentGroupTasks(string accessToken, int? currentUserId = null)
         {
             var result = new List<GroupTaskItem>();
 
@@ -216,6 +216,38 @@ namespace mpitfinal2026blazor.Services
             {
                 int groupId = g.GetProperty("id").GetInt32();
                 string groupName = g.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+
+                // Filter: Only include groups where current user belongs
+                bool userBelongsToGroup = false;
+
+                if (currentUserId.HasValue)
+                {
+                    // Check if user is the teacher
+                    if (g.TryGetProperty("teacher", out var teacherProp) && teacherProp.GetInt32() == currentUserId)
+                    {
+                        userBelongsToGroup = true;
+                    }
+                    // Check if user is in the students list
+                    else if (g.TryGetProperty("students", out var studentsProp) && studentsProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var student in studentsProp.EnumerateArray())
+                        {
+                            if (student.GetInt32() == currentUserId)
+                            {
+                                userBelongsToGroup = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // If no userId provided, include all groups (backward compatibility)
+                    userBelongsToGroup = true;
+                }
+
+                if (!userBelongsToGroup)
+                    continue;
 
                 var tasksJson = await GetTasks(accessToken, groupId);
                 if (string.IsNullOrEmpty(tasksJson)) continue;
