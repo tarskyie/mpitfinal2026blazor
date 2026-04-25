@@ -11,12 +11,14 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudLayout Style="display: flex; flex-direction: column; min-height: 100vh;">
-    <MudAppBar Elevation="0">
-        <MudButton Color="Color.Inherit" Style="background-color: #fff;" edge="Edge.Start" OnClick="@((e) => DrawerToggle())">
+    <MudAppBar Elevation="0" Style="background-color: #453799;">
+        <MudButton Color="Color.Inherit" Style="background-color: #453799;" edge="Edge.Start" OnClick="@((e) => DrawerToggle())">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
-                <img src="core.png" style="height: 1.6rem;" />
+                <MudIcon Icon="@Icons.Material.Filled.Menu" />
             </MudStack>
         </MudButton>
+        <MudSpacer />
+        <img class="bg-white p-1 rounded-2" src="core.png" style="height: 1.8rem;"/>
         <MudSpacer />
         @if (!isLoggedIn){
             <MudButton Href="/login" class="text-white">вход</MudButton>
@@ -25,10 +27,8 @@
         else
         {
             <MudStack Row="true" Class="d-flex align-items-center">
-                <MudButton Href="/profile" Style="display: flex; align-items: center;">
-                    <MudText Class="text-white">@name</MudText>
-                </MudButton>
-                <MudMenu Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit">
+                <MudMenu Color="Color.Inherit" Class="text-white" Label="@name">
+                    <MudMenuItem Href="/profile">Профиль</MudMenuItem>
                     <MudMenuItem OnClick="LogOut">Выйти</MudMenuItem>
                 </MudMenu>
             </MudStack>
