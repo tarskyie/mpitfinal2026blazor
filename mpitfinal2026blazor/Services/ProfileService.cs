@@ -189,6 +189,20 @@ namespace mpitfinal2026blazor.Services
             catch { return null; }
         }
 
+        public async Task<string> GetSolutionsRawJson(string accessToken, int taskId)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/solutions/?task={taskId}");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            try
+            {
+                var response = await _httpClient.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+                return json;
+            }
+            catch {  }
+            return string.Empty;
+        }
+
         public async Task<(bool Success, string Message)> JoinGroup(string accessToken, int groupId, string inviteCode)
         {
             var payload = new { invite_code = inviteCode };

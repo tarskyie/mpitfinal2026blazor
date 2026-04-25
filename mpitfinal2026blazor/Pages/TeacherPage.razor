@@ -145,7 +145,7 @@
                                         <MudTh Class="text-nowrap">Оценка</MudTh>
                                     </HeaderContent>
                                     <RowTemplate>
-                                        <MudTd>@context.Student?.Username</MudTd>
+                                        <MudTd>@context.Student</MudTd>
                                         <MudTd Style="word-break: break-word; max-width: 250px;">
                                             @context.Text
                                         </MudTd>
@@ -210,7 +210,10 @@
     </MudGrid>
 </MudContainer>
 
+@status
+
 @code {
+    string status = "";
     List<Group> _groupList = new();
     string _name = string.Empty;
     string accessToken = string.Empty;
@@ -298,10 +301,14 @@
 
     private async void ViewSolutions(TaskModel task)
     {
-        _solutions.Clear();
         _selectedTask = task;
         _pendingGrades.Clear();
         _gradeStatusText = string.Empty;
+
+        // Debug: log raw JSON
+        var response = await profileService.GetSolutionsRawJson(accessToken, task.Id);
+        status = response; // Or use a UI alert
+
         _solutions = await profileService.GetSolutionsForTask(accessToken, task.Id) ?? new();
         foreach (var s in _solutions)
         {
@@ -318,7 +325,7 @@
     {
         solutionsVisible = false;
         _selectedTask = null;
-        _solutions.Clear();
+        //_solutions.Clear();
         _pendingGrades.Clear();
         _gradeStatusText = string.Empty;
     }
@@ -332,7 +339,7 @@
         if (result)
         {
             solution.Grade = grade;
-            _gradeStatusText = $"Оценка {grade} сохранена для студента {solution.Student?.Username}.";
+            _gradeStatusText = $"Оценка {grade} сохранена для студента {solution.Student}.";
             _gradeAlertSeverity = Severity.Success;
         }
         else
