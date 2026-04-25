@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Security.AccessControl;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace mpitfinal2026blazor.Services
 {
@@ -330,88 +331,42 @@ namespace mpitfinal2026blazor.Services
         public async Task<List<GroupTaskItem>> GetParentStudentTasks(string accessToken)
         {
             var result = new List<GroupTaskItem>();
-
-            var groupsJson = await GetGroups(accessToken);
-            if (string.IsNullOrEmpty(groupsJson)) return result;
-
-            List<JsonElement> groups;
-            try { groups = JsonSerializer.Deserialize<List<JsonElement>>(groupsJson) ?? new(); }
-            catch { return result; }
-
-            foreach (var g in groups)
-            {
-                int groupId = g.GetProperty("id").GetInt32();
-                string groupName = g.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-
-                var tasksJson = await GetTasks(accessToken, groupId);
-                if (string.IsNullOrEmpty(tasksJson)) continue;
-
-                List<JsonElement> tasks;
-                try { tasks = JsonSerializer.Deserialize<List<JsonElement>>(tasksJson) ?? new(); }
-                catch { continue; }
-
-                foreach (var t in tasks)
-                {
-                    if (t.GetProperty("group").GetInt32() != groupId)
-                    {
-                        continue;
-                    }
-
-                    int taskId = t.GetProperty("id").GetInt32();
-                    string title = t.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
-                    DateTime? expDate = null;
-                    if (t.TryGetProperty("expiration_date", out var ed) && ed.ValueKind != JsonValueKind.Null
-                        && DateTime.TryParse(ed.GetString(), out var parsedDate))
-                        expDate = parsedDate;
-
-                    var solutionsJson = await GetSolutionsForTask(accessToken, taskId);
-                    string status = "not done";
-
-                    if (!string.IsNullOrEmpty(solutionsJson))
-                    {
-                        try
-                        {
-                            var solutions = JsonSerializer.Deserialize<List<SolutionModel>>(solutionsJson) ?? new();
-                            var solution = solutions.FirstOrDefault();
-                            if (solution != null && solution.Grade.HasValue)
-                            {
-                                status = solution.Grade.Value.ToString();
-                            }
-                            else if (expDate.HasValue && expDate < DateTime.UtcNow)
-                            {
-                                status = "expired";
-                            }
-                        }
-                        catch { }
-                    }
-                    else if (expDate.HasValue && expDate < DateTime.UtcNow)
-                    {
-                        status = "expired";
-                    }
-
-                    result.Add(new GroupTaskItem
-                    {
-                        TaskId = taskId,
-                        Title = title,
-                        GroupId = groupId,
-                        GroupName = groupName,
-                        ExpirationDate = expDate,
-                        Status = status
-                    });
-                }
-            }
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/parent-tasks/");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var response = await _httpClient.SendAsync(request);
+            result = await response.Content.ReadFromJsonAsync<List<GroupTaskItem>>() ?? new List<GroupTaskItem>();
 
             return result;
+        }
+
+        public async Task <JsonElement> GetStudentDetail(string accessToken)
+        {
+            // Get student detail as a parent
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/parent-student-detail/");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var response = await _httpClient.SendAsync(request);
+            return await response.Content.ReadFromJsonAsync<JsonElement>();
         }
     }
 
     public class GroupTaskItem
     {
+        [JsonPropertyName("task_id")]
         public int TaskId { get; set; }
+
+        [JsonPropertyName("title")]
         public string Title { get; set; } = "";
+
+        [JsonPropertyName("group")]
         public int GroupId { get; set; }
+
+        [JsonPropertyName("group_name")]
         public string GroupName { get; set; } = "";
+
+        [JsonPropertyName("expiration_date")]
         public DateTime? ExpirationDate { get; set; }
+
+        [JsonPropertyName("status")]
         public string Status { get; set; } = "not done";
     }
 }

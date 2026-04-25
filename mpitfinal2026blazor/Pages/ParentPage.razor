@@ -121,8 +121,6 @@
                 return;
             }
 
-            // Fetch student tasks - this would need a dedicated API endpoint
-            // For now, we'll attempt to load tasks if there's a relationship
             await LoadStudentTasks();
         }
         catch (Exception ex)
@@ -142,21 +140,15 @@
 
         try
         {
-            // Get all tasks for the parent's student
-            _tasks = await profileService.GetParentStudentTasks(_accessToken);
-
-            // Try to get student info - this would require a dedicated endpoint
-            // For now, we'll use the current user info or placeholder
-            if (_currentUser.HasValue)
+            var user = await profileService.GetStudentDetail(_accessToken);
+            _studentInfo = new User
             {
-                var user = _currentUser.Value;
-                _studentInfo = new User
-                {
-                    FirstName = user.TryGetProperty("first_name", out var fn) ? fn.GetString() ?? "Студент" : "Студент",
-                    LastName = user.TryGetProperty("last_name", out var ln) ? ln.GetString() ?? "Имя" : "Имя",
-                    Email = user.TryGetProperty("email", out var em) ? em.GetString() ?? "" : ""
-                };
-            }
+                FirstName = user.TryGetProperty("first_name", out var fn) ? fn.GetString() ?? "Имя" : "Имя",
+                LastName = user.TryGetProperty("last_name", out var ln) ? ln.GetString() ?? "Фамилия" : "Фамилия",
+                Email = user.TryGetProperty("email", out var em) ? em.GetString() ?? "" : ""
+            };
+
+            _tasks = await profileService.GetParentStudentTasks(_accessToken);
         }
         catch (Exception ex)
         {

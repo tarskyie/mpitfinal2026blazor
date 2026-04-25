@@ -288,6 +288,7 @@
 
     private async void ViewSolutions(mpitfinal2026blazor.Models.TaskModel task)
     {
+        _solutions.Clear();
         _selectedTask = task;
         _pendingGrades.Clear();
         _gradeStatusText = string.Empty;
@@ -297,11 +298,19 @@
             try
             {
                 var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-                _solutions = JsonSerializer.Deserialize<List<mpitfinal2026blazor.Models.SolutionModel>>(json, options) ?? new();
+                var solutions = JsonSerializer.Deserialize<List<mpitfinal2026blazor.Models.SolutionModel>>(json, options) ?? new();
                 // Pre-fill pending grades with existing grades so teacher sees current value
-                foreach (var s in _solutions)
+                foreach (var s in solutions)
+                {
                     if (s.Grade.HasValue)
+                    {
                         _pendingGrades[s.Id] = s.Grade;
+                    }
+                    if (s.TaskId == task.Id)
+                    {
+                        _solutions.Add(s);
+                    }
+                }
                 solutionsVisible = true;
             }
             catch { _solutions = new(); solutionsVisible = false; }
