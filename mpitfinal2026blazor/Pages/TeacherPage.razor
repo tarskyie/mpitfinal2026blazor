@@ -136,13 +136,20 @@
                                     }
                                 </MudButton>
 
-                                <MudTable Items="_solutions" Dense="true" Hover="true" Elevation="0">
+                                <MudTable Items="_solutions"
+                                          Dense="true"
+                                          Hover="true"
+                                          Elevation="0"
+                                          @ref="_solutionsTable"
+                                          SelectedItem="_selectedSolution"
+                                          SelectedItemChanged="@( (SolutionModel s) => OnSolutionSelected(s) )">
                                     <HeaderContent>
                                         <MudTh>Ученик</MudTh>
                                         <MudTh>Текст</MudTh>
                                         <MudTh>Статус</MudTh>
                                         <MudTh>Дата</MudTh>
                                         <MudTh Class="text-nowrap">Оценка</MudTh>
+                                        <MudTh>Действия</MudTh>
                                     </HeaderContent>
                                     <RowTemplate>
                                         <MudTd>@context.Student</MudTd>
@@ -167,15 +174,31 @@
                                                                  ValueChanged="@((int? v) => _pendingGrades[context.Id] = v)"
                                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
                                                                  Min="1" Max="5"
-                                                                 Class="flex-grow-1" Style="min-width: 60px;"/>
+                                                                 Class="flex-grow-1" Style="min-width: 60px;" />
                                                 <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
                                                                Color="Color.Primary"
                                                                Disabled="@(!_pendingGrades.ContainsKey(context.Id) || !_pendingGrades[context.Id].HasValue)"
                                                                OnClick="() => GradeSolution(context)" />
                                             </div>
                                         </MudTd>
+                                        <MudTd>
+                                            <MudButton Variant="Variant.Filled"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       OnClick="() => OnSolutionSelected(context)">View</MudButton>
+                                        </MudTd>
                                     </RowTemplate>
                                 </MudTable>
+
+                                @if (_selectedSolution != null)
+                                {
+                                    <div class="mt-4">
+                                        <MudText Typo="Typo.h6">Решение студента: @_selectedSolution.Student</MudText>
+                                        <MudPaper Elevation="2" Class="pa-4 mt-2">
+                                            <pre>@_selectedSolution.Text</pre>
+                                        </MudPaper>
+                                    </div>
+                                }
                                 @if (!string.IsNullOrEmpty(_gradeStatusText))
                                 {
                                     <MudAlert Severity="@_gradeAlertSeverity" Class="mt-4" Variant="Variant.Outlined" Dense="true">@_gradeStatusText</MudAlert>
@@ -231,6 +254,8 @@
     Dictionary<int, int?> _pendingGrades = new();
     string _gradeStatusText = string.Empty;
     Severity _gradeAlertSeverity = Severity.Normal;
+    private MudTable<SolutionModel> _solutionsTable;
+    private SolutionModel _selectedSolution;
 
     // AI Preview State
     private bool _isPreviewLoading = false;
@@ -262,6 +287,12 @@
             _groupList = await profileService.GetGroups(accessToken) ?? new();
             StateHasChanged();
         }
+    }
+
+    private void OnSolutionSelected(SolutionModel solution)
+    {
+        _selectedSolution = solution;
+        StateHasChanged();
     }
 
     private async Task AddGroup()
@@ -328,6 +359,7 @@
         //_solutions.Clear();
         _pendingGrades.Clear();
         _gradeStatusText = string.Empty;
+        _selectedSolution = null;
     }
 
     private async Task GradeSolution(SolutionModel solution)
@@ -358,7 +390,7 @@
         _previewGrades.Clear();
         StateHasChanged();
 
-        var result = await llmService.GetPreviewGradesAsync(_selectedTask.Id);
+        var result = await llmService.GetPreviewGradesAsync(_selectedTask.Id, accessToken);
 
         if (result != null)
         {

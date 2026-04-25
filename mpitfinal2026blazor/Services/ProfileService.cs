@@ -135,7 +135,7 @@ namespace mpitfinal2026blazor.Services
             catch { return null; }
         }
 
-                public async Task<List<Group>?> GetGroups(string accessToken)
+        public async Task<List<Group>?> GetGroups(string accessToken)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/groups/");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
@@ -184,7 +184,14 @@ namespace mpitfinal2026blazor.Services
             {
                 var response = await _httpClient.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<List<SolutionModel>>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                List <SolutionModel> theList = new();
+                foreach (var item in JsonSerializer.Deserialize<List<SolutionModel>>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }))
+                {
+                    if (item.TaskId != taskId) continue;
+
+                    theList.Add(item);
+                }
+                return theList;
             }
             catch { return null; }
         }
@@ -199,7 +206,7 @@ namespace mpitfinal2026blazor.Services
                 var json = await response.Content.ReadAsStringAsync();
                 return json;
             }
-            catch {  }
+            catch { }
             return string.Empty;
         }
 
@@ -306,7 +313,8 @@ namespace mpitfinal2026blazor.Services
             return response.IsSuccessStatusCode;
         }
 
-        public async Task<List<SolutionModel>> GetMySolutions(string accessToken) {
+        public async Task<List<SolutionModel>> GetMySolutions(string accessToken)
+        {
             List<SolutionModel> solutions = new List<SolutionModel>();
             var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/solutions/");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -334,7 +342,7 @@ namespace mpitfinal2026blazor.Services
             return result;
         }
 
-        public async Task <JsonElement> GetStudentDetail(string accessToken)
+        public async Task<JsonElement> GetStudentDetail(string accessToken)
         {
             // Get student detail as a parent
             var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/parent-student-detail/");
