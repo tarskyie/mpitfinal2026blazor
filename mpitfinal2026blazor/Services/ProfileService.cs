@@ -135,14 +135,15 @@ namespace mpitfinal2026blazor.Services
             catch { return null; }
         }
 
-        public async Task<string?> GetGroups(string accessToken)
+                public async Task<List<Group>?> GetGroups(string accessToken)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/groups/");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
             try
             {
                 var response = await _httpClient.SendAsync(request);
-                return await response.Content.ReadAsStringAsync();
+                var json = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<List<Group>>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             }
             catch { return null; }
         }
@@ -162,26 +163,28 @@ namespace mpitfinal2026blazor.Services
             catch { return null; }
         }
 
-        public async Task<string?> GetTasks(string accessToken, int groupId)
+        public async Task<List<TaskModel>?> GetTasks(string accessToken, int groupId)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/tasks/?group={groupId}");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
             try
             {
                 var response = await _httpClient.SendAsync(request);
-                return await response.Content.ReadAsStringAsync();
+                var json = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<List<TaskModel>>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             }
             catch { return null; }
         }
 
-        public async Task<string?> GetSolutionsForTask(string accessToken, int taskId)
+        public async Task<List<SolutionModel>?> GetSolutionsForTask(string accessToken, int taskId)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/solutions/?task={taskId}");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
             try
             {
                 var response = await _httpClient.SendAsync(request);
-                return await response.Content.ReadAsStringAsync();
+                var json = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<List<SolutionModel>>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             }
             catch { return null; }
         }
@@ -206,17 +209,13 @@ namespace mpitfinal2026blazor.Services
         {
             var result = new List<GroupTaskItem>();
 
-            var groupsJson = await GetGroups(accessToken);
-            if (string.IsNullOrEmpty(groupsJson)) return result;
-
-            List<JsonElement> groups;
-            try { groups = JsonSerializer.Deserialize<List<JsonElement>>(groupsJson) ?? new(); }
-            catch { return result; }
+            var groups = await GetGroups(accessToken);
+            if (groups == null) return result;
 
             foreach (var g in groups)
             {
-                int groupId = g.GetProperty("id").GetInt32();
-                string groupName = g.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                int groupId = g.Id;
+                string groupName = g.Name ?? "";
 
                 // Filter: Only include groups where current user belongs
                 bool userBelongsToGroup = false;
@@ -224,21 +223,14 @@ namespace mpitfinal2026blazor.Services
                 if (currentUserId.HasValue)
                 {
                     // Check if user is the teacher
-                    if (g.TryGetProperty("teacher", out var teacherProp) && teacherProp.GetInt32() == currentUserId)
+                    if (g.Teacher == currentUserId)
                     {
                         userBelongsToGroup = true;
                     }
                     // Check if user is in the students list
-                    else if (g.TryGetProperty("students", out var studentsProp) && studentsProp.ValueKind == JsonValueKind.Array)
+                    else if (g.Students != null && g.Students.Contains(currentUserId.Value))
                     {
-                        foreach (var student in studentsProp.EnumerateArray())
-                        {
-                            if (student.GetInt32() == currentUserId)
-                            {
-                                userBelongsToGroup = true;
-                                break;
-                            }
-                        }
+                        userBelongsToGroup = true;
                     }
                 }
                 else
@@ -250,34 +242,23 @@ namespace mpitfinal2026blazor.Services
                 if (!userBelongsToGroup)
                     continue;
 
-                var tasksJson = await GetTasks(accessToken, groupId);
-                if (string.IsNullOrEmpty(tasksJson)) continue;
-
-                List<JsonElement> tasks;
-                try { tasks = JsonSerializer.Deserialize<List<JsonElement>>(tasksJson) ?? new(); }
-                catch { continue; }
+                var tasks = await GetTasks(accessToken, groupId);
+                if (tasks == null) continue;
 
                 foreach (var t in tasks)
                 {
-                    if (t.GetProperty("group").GetInt32() != groupId)
+                    if (t.Group != groupId)
                     {
                         continue;
                     }
 
-                    int taskId = t.GetProperty("id").GetInt32();
-                    string title = t.TryGetProperty("title", out var ti) ? ti.GetString() ?? "" : "";
-                    DateTime? expDate = null;
-                    if (t.TryGetProperty("expiration_date", out var ed) && ed.ValueKind != JsonValueKind.Null
-                        && DateTime.TryParse(ed.GetString(), out var parsedDate))
-                        expDate = parsedDate;
-
                     result.Add(new GroupTaskItem
                     {
-                        TaskId = taskId,
-                        Title = title,
+                        TaskId = t.Id,
+                        Title = t.Title ?? "",
                         GroupId = groupId,
                         GroupName = groupName,
-                        ExpirationDate = expDate
+                        ExpirationDate = t.ExpirationDate
                     });
                 }
             }

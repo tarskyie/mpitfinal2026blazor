@@ -1,15 +1,17 @@
 @page "/teacher"
 @inject Services.ProfileService profileService
 @inject Services.StorageService storageService
+@inject Services.ZhgutLlmService llmService
 @inject NavigationManager navigationManager
 @using System.Text.Json
+@using mpitfinal2026blazor.Models
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-8">
     <MudText Typo="Typo.h3" GutterBottom="true">Страница учителя</MudText>
 
     <MudGrid>
         <MudItem xs="12" md="4">
-            <MudPaper Elevation="3" Class="pa-4 flex-grow-1" SClass="pa-4 d-flex flex-column"
+            <MudPaper Elevation="3" Class="pa-4 flex-grow-1 pa-4 d-flex flex-column"
                       Style="min-height: 300px;">
                 <MudText Typo="Typo.h5" Class="mb-4">Группы</MudText>
 
@@ -46,11 +48,6 @@
                         </MudCard>
                     }
                 </div>
-
-                @if (!string.IsNullOrEmpty(statusText))
-                {
-                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">@statusText</MudAlert>
-                }
             </MudPaper>
         </MudItem>
 
@@ -66,7 +63,7 @@
                         <MudButton StartIcon="@Icons.Material.Filled.Close" Variant="Variant.Text" Color="Color.Error" OnClick="ClearSelectedGroup">Закрыть</MudButton>
                     </div>
 
-                    <MudTabs Elevation="0" Outlined="true" PanelClass="pa-4">
+                    <MudTabs Elevation="0" Outlined="true" Class="pa-4">
                         <MudTabPanel Text="Задачи" Icon="@Icons.Material.Filled.List">
                             <MudTable Items="_tasks"
                                       Hover="true"
@@ -95,7 +92,7 @@
                                 </RowTemplate>
                             </MudTable>
 
-                            <MudPaper Variant="Variant.Outlined" Class="pa-4 mt-6">
+                            <MudPaper Elevation="1" Class="pa-4 mt-6">
                                 <MudText Typo="Typo.subtitle2" Class="mb-2">Создать новую задачу</MudText>
                                 <MudGrid Spacing="2" Justify="Justify.FlexEnd">
                                     <MudItem xs="12" sm="6">
@@ -128,6 +125,17 @@
                                 </CardHeaderActions>
                             </MudCardHeader>
                             <MudCardContent>
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PreviewGrades" Disabled="_isPreviewLoading">
+                                    @if (_isPreviewLoading)
+                                    {
+                                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                                    }
+                                    else
+                                    {
+                                        <span>Preview Grades with AI</span>
+                                    }
+                                </MudButton>
+
                                 <MudTable Items="_solutions" Dense="true" Hover="true" Elevation="0">
                                     <HeaderContent>
                                         <MudTh>Ученик</MudTh>
@@ -137,7 +145,7 @@
                                         <MudTh Class="text-nowrap">Оценка</MudTh>
                                     </HeaderContent>
                                     <RowTemplate>
-                                        <MudTd>@context.StudentId</MudTd>
+                                        <MudTd>@context.Student?.Username</MudTd>
                                         <MudTd Style="word-break: break-word; max-width: 250px;">
                                             @context.Text
                                         </MudTd>
@@ -172,6 +180,21 @@
                                 {
                                     <MudAlert Severity="@_gradeAlertSeverity" Class="mt-4" Variant="Variant.Outlined" Dense="true">@_gradeStatusText</MudAlert>
                                 }
+
+                                @if (_previewGrades.Any())
+                                {
+                                    <MudTable Items="_previewGrades" Class="mt-4" Dense="true" Hover="true" Elevation="0">
+                                        <HeaderContent>
+                                            <MudTh>Ученик</MudTh>
+                                            <MudTh>AI Оценка</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd>@context.StudentName</MudTd>
+                                            <MudTd>@context.PreviewGrade</MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+
                             </MudCardContent>
                         </MudCard>
                     }
@@ -190,22 +213,25 @@
 @code {
     List<Group> _groupList = new();
     string _name = string.Empty;
-    string? statusText = string.Empty;
     string accessToken = string.Empty;
     int? teacherId;
 
     Group? selectedGroup = null;
-    List<mpitfinal2026blazor.Models.TaskModel> _tasks = new();
+    List<TaskModel> _tasks = new();
     string _taskTitle = string.Empty;
     DateTime _taskDeadline = DateTime.Today;
-    mpitfinal2026blazor.Models.TaskModel? _selectedTask = null;
-    List<mpitfinal2026blazor.Models.SolutionModel> _solutions = new();
+    TaskModel? _selectedTask = null;
+    List<SolutionModel> _solutions = new();
     bool solutionsVisible = false;
 
     // Grading state: maps solution ID → pending grade value
     Dictionary<int, int?> _pendingGrades = new();
     string _gradeStatusText = string.Empty;
     Severity _gradeAlertSeverity = Severity.Normal;
+
+    // AI Preview State
+    private bool _isPreviewLoading = false;
+    private List<PreviewGradeResponse> _previewGrades = new();
 
     protected override void OnInitialized()
     {
@@ -230,30 +256,14 @@
             JsonElement concreteMe = myself ?? default;
             teacherId = concreteMe.GetProperty("id").GetInt32();
 
-            statusText = await profileService.GetGroups(accessToken);
-            if (statusText != null)
-            {
-                try
-                {
-                    var options = new JsonSerializerOptions
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-                    };
-                    _groupList.AddRange(JsonSerializer.Deserialize<List<Group>>(statusText, options) ?? new());
-                    statusText = "Deserialization complete.";
-                }
-                catch (Exception ex)
-                {
-                    statusText += "An error has occured: " + ex.Message;
-                }
-            }
+            _groupList = await profileService.GetGroups(accessToken) ?? new();
             StateHasChanged();
         }
     }
 
     private async Task AddGroup()
     {
-        statusText = await profileService.CreateGroup(accessToken, _name);
+        await profileService.CreateGroup(accessToken, _name);
     }
 
     private async void SelectGroup(Group group)
@@ -273,16 +283,7 @@
     private async Task LoadTasks()
     {
         if (selectedGroup == null) return;
-        var json = await profileService.GetTasks(accessToken, selectedGroup.Id);
-        if (json != null)
-        {
-            try
-            {
-                var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-                _tasks = JsonSerializer.Deserialize<List<mpitfinal2026blazor.Models.TaskModel>>(json, options) ?? new();
-            }
-            catch { _tasks = new(); }
-        }
+        _tasks = await profileService.GetTasks(accessToken, selectedGroup.Id) ?? new();
     }
 
     private async void CreateTask()
@@ -295,35 +296,21 @@
         StateHasChanged();
     }
 
-    private async void ViewSolutions(mpitfinal2026blazor.Models.TaskModel task)
+    private async void ViewSolutions(TaskModel task)
     {
         _solutions.Clear();
         _selectedTask = task;
         _pendingGrades.Clear();
         _gradeStatusText = string.Empty;
-        var json = await profileService.GetSolutionsForTask(accessToken, task.Id);
-        if (json != null)
+        _solutions = await profileService.GetSolutionsForTask(accessToken, task.Id) ?? new();
+        foreach (var s in _solutions)
         {
-            try
+            if (s.Grade.HasValue)
             {
-                var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-                var solutions = JsonSerializer.Deserialize<List<mpitfinal2026blazor.Models.SolutionModel>>(json, options) ?? new();
-                // Pre-fill pending grades with existing grades so teacher sees current value
-                foreach (var s in solutions)
-                {
-                    if (s.Grade.HasValue)
-                    {
-                        _pendingGrades[s.Id] = s.Grade;
-                    }
-                    if (s.TaskId == task.Id)
-                    {
-                        _solutions.Add(s);
-                    }
-                }
-                solutionsVisible = true;
+                _pendingGrades[s.Id] = s.Grade;
             }
-            catch { _solutions = new(); solutionsVisible = false; }
         }
+        solutionsVisible = true;
         StateHasChanged();
     }
 
@@ -336,7 +323,7 @@
         _gradeStatusText = string.Empty;
     }
 
-    private async Task GradeSolution(mpitfinal2026blazor.Models.SolutionModel solution)
+    private async Task GradeSolution(SolutionModel solution)
     {
         if (!_pendingGrades.TryGetValue(solution.Id, out var grade) || !grade.HasValue)
             return;
@@ -345,7 +332,7 @@
         if (result)
         {
             solution.Grade = grade;
-            _gradeStatusText = $"Оценка {grade} сохранена для студента {solution.StudentId}.";
+            _gradeStatusText = $"Оценка {grade} сохранена для студента {solution.Student?.Username}.";
             _gradeAlertSeverity = Severity.Success;
         }
         else
@@ -356,18 +343,32 @@
         StateHasChanged();
     }
 
+    private async Task PreviewGrades()
+    {
+        if (_selectedTask == null) return;
+
+        _isPreviewLoading = true;
+        _previewGrades.Clear();
+        StateHasChanged();
+
+        var result = await llmService.GetPreviewGradesAsync(_selectedTask.Id);
+
+        if (result != null)
+        {
+            _previewGrades = result;
+        }
+        else
+        {
+            // Handle error
+        }
+
+        _isPreviewLoading = false;
+        StateHasChanged();
+    }
+
     private void OnDeadlineChanged(DateTime? date)
     {
         if (date.HasValue)
             _taskDeadline = date.Value;
-    }
-
-    public class Group
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public int Teacher { get; set; }
-        public List<int> Students { get; set; } = new();
-        public string InviteCode { get; set; } = string.Empty;
     }
 }

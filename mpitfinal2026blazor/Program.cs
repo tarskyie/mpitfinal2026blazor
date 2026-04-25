@@ -10,7 +10,12 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddMudServices();
-builder.Services.AddScoped<ZhgutLlmService>();
+builder.Services.AddScoped<ZhgutLlmService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<HttpClient>();
+    var storageService = sp.GetRequiredService<StorageService>();
+    return new ZhgutLlmService(httpClient, storageService);
+});
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<StorageService>();
 

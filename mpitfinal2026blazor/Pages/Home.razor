@@ -127,7 +127,7 @@
                                   @bind-Value="prompt"
                                   Variant="Variant.Outlined"
                                   Margin="Margin.Dense"
-                                  AutoGrow="true"
+                                  Lines="5"
                                   FullWidth="true"
                                   Disabled="isLoading"
                                   OnKeyDown="HandleKeyDown"
@@ -509,6 +509,10 @@
 
     private async Task<string> GetSubmissions()
     {
+        if (refreshToken == null)
+        {
+            return "no token";
+        }
         studentAccessToken = await profileService.GetAccessToken(refreshToken);
         List<Models.SolutionModel> solutions = await profileService.GetMySolutions(studentAccessToken); 
         string result = string.Empty;
